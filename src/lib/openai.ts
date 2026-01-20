@@ -51,17 +51,40 @@ You have access to the user's current productivity data including their tasks, h
 Guidelines:
 - Be concise but helpful (keep responses under 300 words)
 - Use emojis sparingly for visual appeal
-- When suggesting tasks or habits, ask if the user wants you to create them
 - Provide specific, actionable advice based on their data
 - Be encouraging and positive
 - Format responses with markdown for readability (bold, bullet points, etc.)
 
-When the user asks you to create a task, habit, or goal, respond with a JSON block that the app can parse:
-- For tasks: \`\`\`json:task {"title": "...", "priority": "medium|high|urgent|low", "dueDate": "YYYY-MM-DD or null"}\`\`\`
-- For habits: \`\`\`json:habit {"name": "...", "frequency": "daily|weekly|monthly", "description": "..."}\`\`\`
-- For goals: \`\`\`json:goal {"title": "...", "description": "...", "targetDate": "YYYY-MM-DD or null"}\`\`\`
+IMPORTANT - Creating Tasks, Habits, and Goals:
+When the user asks you to CREATE, ADD, or MAKE a task, habit, or goal, you MUST include the appropriate JSON block in your response. Do NOT ask for confirmation - just create it immediately.
 
-Always confirm with the user before creating items.`;
+For TASKS, include this exact format:
+\`\`\`json:task
+{"title": "The task title", "priority": "medium", "dueDate": null}
+\`\`\`
+Priority must be one of: "low", "medium", "high", "urgent"
+dueDate should be "YYYY-MM-DD" format or null
+
+For HABITS, include this exact format:
+\`\`\`json:habit
+{"name": "The habit name", "frequency": "daily", "description": "Brief description"}
+\`\`\`
+Frequency must be one of: "daily", "weekly", "monthly"
+
+For GOALS, include this exact format:
+\`\`\`json:goal
+{"title": "The goal title", "description": "Goal description", "targetDate": null}
+\`\`\`
+targetDate should be "YYYY-MM-DD" format or null
+
+Always include a brief confirmation message along with the JSON block, like "Done! I've created that task for you."
+
+Examples of user requests that should trigger creation:
+- "Create a task to buy groceries" → include json:task block
+- "Add a habit for morning meditation" → include json:habit block  
+- "Make a goal to learn Spanish" → include json:goal block
+- "I need to call mom tomorrow" → include json:task block (infer the intent)
+- "Remind me to exercise" → include json:task block`;
 
 export function buildContextMessage(context: ProductivityContext): string {
   const today = new Date().toLocaleDateString('en-US', { 
@@ -175,36 +198,55 @@ export function parseAIResponse(response: string): {
 } {
   const result: ReturnType<typeof parseAIResponse> = { text: response };
 
-  // Check for task creation
-  const taskMatch = response.match(/```json:task\s*(\{[\s\S]*?\})\s*```/);
+  // More flexible regex patterns that handle variations in formatting
+  // Matches: ```json:task, ```task, ``` json:task, etc.
+  const taskMatch = response.match(/```\s*(?:json)?:?\s*task\s*\n?(\{[\s\S]*?\})\s*```/i);
   if (taskMatch) {
     try {
-      result.task = JSON.parse(taskMatch[1]);
+      const parsed = JSON.parse(taskMatch[1]);
+      result.task = {
+        title: parsed.title || 'Untitled Task',
+        priority: parsed.priority || 'medium',
+        dueDate: parsed.dueDate || parsed.due_date || null,
+      };
       result.text = response.replace(taskMatch[0], '').trim();
+      console.log('Parsed task:', result.task);
     } catch (e) {
-      console.error('Failed to parse task JSON:', e);
+      console.error('Failed to parse task JSON:', e, 'Raw:', taskMatch[1]);
     }
   }
 
   // Check for habit creation
-  const habitMatch = response.match(/```json:habit\s*(\{[\s\S]*?\})\s*```/);
+  const habitMatch = response.match(/```\s*(?:json)?:?\s*habit\s*\n?(\{[\s\S]*?\})\s*```/i);
   if (habitMatch) {
     try {
-      result.habit = JSON.parse(habitMatch[1]);
+      const parsed = JSON.parse(habitMatch[1]);
+      result.habit = {
+        name: parsed.name || 'Untitled Habit',
+        frequency: parsed.frequency || 'daily',
+        description: parsed.description || '',
+      };
       result.text = response.replace(habitMatch[0], '').trim();
+      console.log('Parsed habit:', result.habit);
     } catch (e) {
-      console.error('Failed to parse habit JSON:', e);
+      console.error('Failed to parse habit JSON:', e, 'Raw:', habitMatch[1]);
     }
   }
 
   // Check for goal creation
-  const goalMatch = response.match(/```json:goal\s*(\{[\s\S]*?\})\s*```/);
+  const goalMatch = response.match(/```\s*(?:json)?:?\s*goal\s*\n?(\{[\s\S]*?\})\s*```/i);
   if (goalMatch) {
     try {
-      result.goal = JSON.parse(goalMatch[1]);
+      const parsed = JSON.parse(goalMatch[1]);
+      result.goal = {
+        title: parsed.title || 'Untitled Goal',
+        description: parsed.description || '',
+        targetDate: parsed.targetDate || parsed.target_date || null,
+      };
       result.text = response.replace(goalMatch[0], '').trim();
+      console.log('Parsed goal:', result.goal);
     } catch (e) {
-      console.error('Failed to parse goal JSON:', e);
+      console.error('Failed to parse goal JSON:', e, 'Raw:', goalMatch[1]);
     }
   }
 

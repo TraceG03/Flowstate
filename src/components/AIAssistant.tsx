@@ -215,19 +215,73 @@ export default function AIAssistant() {
 
         // Parse for actionable items
         const parsed = parseAIResponse(fullResponse);
+        console.log('Parsed AI response:', parsed);
+
+        // Automatically create items if AI included them
+        let createdItem = '';
+        
+        if (parsed.task) {
+          try {
+            await addTask({
+              title: parsed.task.title,
+              description: '',
+              status: 'todo',
+              priority: (parsed.task.priority as 'urgent' | 'high' | 'medium' | 'low') || 'medium',
+              tags: [],
+              dueDate: parsed.task.dueDate || null,
+              startDate: null,
+              endDate: null,
+              projectId: null,
+              completedAt: null,
+              assignee: null,
+              color: '#6366f1',
+            });
+            createdItem = `\n\n✅ **Task created:** "${parsed.task.title}"`;
+            console.log('Task created successfully:', parsed.task.title);
+          } catch (e) {
+            console.error('Failed to create task:', e);
+            createdItem = `\n\n⚠️ Failed to create task. Please try again.`;
+          }
+        }
+        
+        if (parsed.habit) {
+          try {
+            await addHabit({
+              name: parsed.habit.name,
+              description: parsed.habit.description || '',
+              frequency: (parsed.habit.frequency as 'daily' | 'weekly' | 'monthly') || 'daily',
+              targetCount: 1,
+              color: '#10b981',
+            });
+            createdItem = `\n\n✅ **Habit created:** "${parsed.habit.name}"`;
+            console.log('Habit created successfully:', parsed.habit.name);
+          } catch (e) {
+            console.error('Failed to create habit:', e);
+            createdItem = `\n\n⚠️ Failed to create habit. Please try again.`;
+          }
+        }
+        
+        if (parsed.goal) {
+          try {
+            await addGoal({
+              title: parsed.goal.title,
+              description: parsed.goal.description || '',
+              targetDate: parsed.goal.targetDate || null,
+              milestones: [],
+            });
+            createdItem = `\n\n✅ **Goal created:** "${parsed.goal.title}"`;
+            console.log('Goal created successfully:', parsed.goal.title);
+          } catch (e) {
+            console.error('Failed to create goal:', e);
+            createdItem = `\n\n⚠️ Failed to create goal. Please try again.`;
+          }
+        }
 
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: parsed.text,
+          content: parsed.text + createdItem,
           timestamp: new Date(),
-          pending: parsed.task 
-            ? { type: 'task', data: parsed.task }
-            : parsed.habit 
-              ? { type: 'habit', data: parsed.habit }
-              : parsed.goal 
-                ? { type: 'goal', data: parsed.goal }
-                : undefined,
         };
 
         setMessages(prev => [...prev, assistantMessage]);

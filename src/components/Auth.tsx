@@ -4,7 +4,7 @@ import { Zap, Mail, Lock, User, ArrowRight, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Auth() {
-  const { signIn, signUp, signInWithGoogle, isConfigured } = useAuth();
+  const { signIn, signUp, signInWithGoogle, isConfigured, enterDemoMode } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -206,6 +206,16 @@ export default function Auth() {
             />
           </svg>
           Google
+        </button>
+
+        <button
+          type="button"
+          className="btn"
+          style={{ width: '100%', marginTop: 12, background: 'transparent', border: '1px dashed var(--border-color)' }}
+          onClick={enterDemoMode}
+        >
+          <Sparkles size={18} />
+          Try Demo Mode
         </button>
 
         <p className="auth-footer">

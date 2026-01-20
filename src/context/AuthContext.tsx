@@ -7,10 +7,12 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   isConfigured: boolean;
+  demoMode: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
+  enterDemoMode: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -81,17 +84,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error ? new Error(error.message) : null };
   };
 
+  const enterDemoMode = () => {
+    setDemoMode(true);
+    // Create a mock user for demo mode
+    setUser({ id: 'demo-user', email: 'demo@flowstate.app' } as User);
+  };
+
   return (
     <AuthContext.Provider
       value={{
-        user,
+        user: demoMode ? ({ id: 'demo-user', email: 'demo@flowstate.app' } as User) : user,
         session,
         loading,
         isConfigured: isSupabaseConfigured,
+        demoMode,
         signIn,
         signUp,
         signOut,
         signInWithGoogle,
+        enterDemoMode,
       }}
     >
       {children}

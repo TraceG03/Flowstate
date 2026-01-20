@@ -555,7 +555,7 @@ export default function AIAssistant() {
                     : "Add OpenAI API key for full AI features..."}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
+                  onKeyDown={handleKeyPress}
                   className="ai-input"
                 />
                 <button 

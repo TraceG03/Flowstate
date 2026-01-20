@@ -220,27 +220,36 @@ export default function AIAssistant() {
         // Automatically create items if AI included them
         let createdItem = '';
         
-        if (parsed.task) {
+        // Handle multiple tasks
+        if (parsed.tasks && parsed.tasks.length > 0) {
           try {
-            await addTask({
-              title: parsed.task.title,
-              description: '',
-              status: 'todo',
-              priority: (parsed.task.priority as 'urgent' | 'high' | 'medium' | 'low') || 'medium',
-              tags: [],
-              dueDate: parsed.task.dueDate || null,
-              startDate: null,
-              endDate: null,
-              projectId: null,
-              completedAt: null,
-              assignee: null,
-              color: '#6366f1',
-            });
-            createdItem = `\n\n✅ **Task created:** "${parsed.task.title}"`;
-            console.log('Task created successfully:', parsed.task.title);
+            const createdTasks: string[] = [];
+            for (const taskData of parsed.tasks) {
+              await addTask({
+                title: taskData.title,
+                description: '',
+                status: 'todo',
+                priority: (taskData.priority as 'urgent' | 'high' | 'medium' | 'low') || 'medium',
+                tags: [],
+                dueDate: taskData.dueDate || null,
+                startDate: null,
+                endDate: null,
+                projectId: null,
+                completedAt: null,
+                assignee: null,
+                color: '#6366f1',
+              });
+              createdTasks.push(taskData.title);
+            }
+            if (createdTasks.length === 1) {
+              createdItem = `\n\n✅ **Task created:** "${createdTasks[0]}"`;
+            } else {
+              createdItem = `\n\n✅ **${createdTasks.length} tasks created:**\n${createdTasks.map(t => `• ${t}`).join('\n')}`;
+            }
+            console.log('Tasks created successfully:', createdTasks.length);
           } catch (e) {
-            console.error('Failed to create task:', e);
-            createdItem = `\n\n⚠️ Failed to create task. Please try again.`;
+            console.error('Failed to create tasks:', e);
+            createdItem = `\n\n⚠️ Failed to create tasks. Please try again.`;
           }
         }
         

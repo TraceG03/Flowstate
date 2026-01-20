@@ -56,9 +56,20 @@ Guidelines:
 - Format responses with markdown for readability (bold, bullet points, etc.)
 
 IMPORTANT - Creating Tasks, Habits, and Goals:
-When the user asks you to CREATE, ADD, or MAKE a task, habit, or goal, you MUST include the appropriate JSON block in your response. Do NOT ask for confirmation - just create it immediately.
+When the user asks you to CREATE, ADD, or MAKE tasks, habits, or goals, you MUST include the appropriate JSON block(s) in your response. Do NOT ask for confirmation - just create them immediately.
 
-For TASKS, include this exact format:
+For MULTIPLE TASKS (when user provides a list), include a separate json:task block for EACH task:
+\`\`\`json:task
+{"title": "First task title here", "priority": "medium", "dueDate": null}
+\`\`\`
+\`\`\`json:task
+{"title": "Second task title here", "priority": "medium", "dueDate": null}
+\`\`\`
+\`\`\`json:task
+{"title": "Third task title here", "priority": "high", "dueDate": null}
+\`\`\`
+
+For a SINGLE TASK:
 \`\`\`json:task
 {"title": "The task title", "priority": "medium", "dueDate": null}
 \`\`\`
@@ -80,11 +91,13 @@ targetDate should be "YYYY-MM-DD" format or null
 Always include a brief confirmation message along with the JSON block, like "Done! I've created that task for you."
 
 Examples of user requests that should trigger creation:
-- "Create a task to buy groceries" → include json:task block
+- "Create a task to buy groceries" → include ONE json:task block
 - "Add a habit for morning meditation" → include json:habit block  
 - "Make a goal to learn Spanish" → include json:goal block
 - "I need to call mom tomorrow" → include json:task block (infer the intent)
-- "Remind me to exercise" → include json:task block`;
+- "Remind me to exercise" → include json:task block
+- "Create these tasks: -Task 1 -Task 2 -Task 3" → include MULTIPLE json:task blocks (one per task)
+- When user provides a bulleted or numbered list of tasks, create ALL of them with separate json:task blocks`;
 
 export function buildContextMessage(context: ProductivityContext): string {
   const today = new Date().toLocaleDateString('en-US', { 
@@ -192,28 +205,37 @@ export async function chat(
 // Parse AI response for actionable items
 export function parseAIResponse(response: string): {
   text: string;
-  task?: { title: string; priority: string; dueDate: string | null };
+  tasks?: Array<{ title: string; priority: string; dueDate: string | null }>;
   habit?: { name: string; frequency: string; description: string };
   goal?: { title: string; description: string; targetDate: string | null };
 } {
   const result: ReturnType<typeof parseAIResponse> = { text: response };
 
-  // More flexible regex patterns that handle variations in formatting
+  // Find ALL task blocks (supports multiple tasks at once)
   // Matches: ```json:task, ```task, ``` json:task, etc.
-  const taskMatch = response.match(/```\s*(?:json)?:?\s*task\s*\n?(\{[\s\S]*?\})\s*```/i);
-  if (taskMatch) {
-    try {
-      const parsed = JSON.parse(taskMatch[1]);
-      result.task = {
-        title: parsed.title || 'Untitled Task',
-        priority: parsed.priority || 'medium',
-        dueDate: parsed.dueDate || parsed.due_date || null,
-      };
-      result.text = response.replace(taskMatch[0], '').trim();
-      console.log('Parsed task:', result.task);
-    } catch (e) {
-      console.error('Failed to parse task JSON:', e, 'Raw:', taskMatch[1]);
+  const taskRegex = /```\s*(?:json)?:?\s*task\s*\n?(\{[\s\S]*?\})\s*```/gi;
+  const taskMatches = [...response.matchAll(taskRegex)];
+  
+  if (taskMatches.length > 0) {
+    result.tasks = [];
+    let cleanedText = response;
+    
+    for (const match of taskMatches) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        result.tasks.push({
+          title: parsed.title || 'Untitled Task',
+          priority: parsed.priority || 'medium',
+          dueDate: parsed.dueDate || parsed.due_date || null,
+        });
+        cleanedText = cleanedText.replace(match[0], '').trim();
+      } catch (e) {
+        console.error('Failed to parse task JSON:', e, 'Raw:', match[1]);
+      }
     }
+    
+    result.text = cleanedText;
+    console.log('Parsed tasks:', result.tasks);
   }
 
   // Check for habit creation

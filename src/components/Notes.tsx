@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Header from './Header';
-import { Plus, FileText, Search, Trash2, Edit2 } from 'lucide-react';
+import { Plus, FileText, Search, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 

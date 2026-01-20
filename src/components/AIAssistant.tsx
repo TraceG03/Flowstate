@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import { Send, Sparkles, Lightbulb, Calendar, CheckSquare, Target, Wand2 } from 'lucide-react';
@@ -19,7 +19,7 @@ const suggestions = [
 ];
 
 export default function AIAssistant() {
-  const { state, addTask, addHabit, addGoal } = useApp();
+  const { state, applyTemplate } = useApp();
   const { tasks, habits, goals, events } = state;
 
   const [messages, setMessages] = useState<Message[]>([
@@ -301,7 +301,7 @@ export default function AIAssistant() {
                     className="btn btn-secondary"
                     style={{ justifyContent: 'flex-start', flexDirection: 'column', alignItems: 'flex-start' }}
                     onClick={() => {
-                      state.applyTemplate?.(template.id);
+                      applyTemplate(template.id);
                       setMessages(prev => [...prev, {
                         id: Date.now().toString(),
                         role: 'assistant',

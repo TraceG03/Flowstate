@@ -1,6 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Search, Bell, Mic, MicOff, Plus, Menu } from 'lucide-react';
+
+// Web Speech API types
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionInstance extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
+  }
+}
 
 interface HeaderProps {
   title: string;
@@ -11,17 +34,17 @@ export default function Header({ title, onAddClick }: HeaderProps) {
   const { state, dispatch } = useApp();
   const [isRecording, setIsRecording] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
+  const [recognition, setRecognition] = useState<SpeechRecognitionInstance | null>(null);
 
   useEffect(() => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const rec = new SpeechRecognition();
+      const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const rec = new SpeechRecognitionClass();
       rec.continuous = false;
       rec.interimResults = false;
       rec.lang = 'en-US';
 
-      rec.onresult = (event) => {
+      rec.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         setSearchQuery(transcript);
         setIsRecording(false);
@@ -51,7 +74,7 @@ export default function Header({ title, onAddClick }: HeaderProps) {
     }
   };
 
-  const unreadReminders = state.reminders.filter(r => !r.dismissed).length;
+  const unreadReminders = state.reminders.filter((r: { dismissed: boolean }) => !r.dismissed).length;
 
   return (
     <header className="header">
@@ -113,9 +136,3 @@ export default function Header({ title, onAddClick }: HeaderProps) {
   );
 }
 
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
-  }
-}

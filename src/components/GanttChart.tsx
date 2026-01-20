@@ -1,16 +1,15 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   format, addDays, startOfWeek, differenceInDays, parseISO, isToday,
-  addWeeks, subWeeks
+  addWeeks
 } from 'date-fns';
-import { v4 as uuidv4 } from 'uuid';
 
 export default function GanttChart() {
-  const { state, dispatch, addProject } = useApp();
+  const { state, addProject } = useApp();
   const { projects, tasks } = state;
 
   const [showModal, setShowModal] = useState(false);

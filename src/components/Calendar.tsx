@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
@@ -9,12 +9,12 @@ import {
 } from 'date-fns';
 
 export default function CalendarView() {
-  const { state, dispatch, addEvent } = useApp();
+  const { state, addEvent } = useApp();
   const { events, tasks } = state;
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showModal, setShowModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [, setSelectedDate] = useState<Date | null>(null);
 
   const [newEvent, setNewEvent] = useState({
     title: '',

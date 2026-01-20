@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
 import {
-  CheckCircle, Circle, Calendar, Tag, Flag, MoreHorizontal,
-  Plus, Filter, List, Grid, Clock, Trash2, Edit2
+  CheckCircle, Calendar,
+  Plus, Filter, List, Grid, Trash2
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import type { Priority, TaskStatus } from '../types';
@@ -20,7 +20,6 @@ export default function Tasks() {
     tag: 'all',
   });
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [editingTask, setEditingTask] = useState<string | null>(null);
 
   const [newTask, setNewTask] = useState({
     title: '',
@@ -83,13 +82,6 @@ export default function Tasks() {
 
   const deleteTask = (id: string) => {
     dispatch({ type: 'DELETE_TASK', payload: id });
-  };
-
-  const priorityColors = {
-    urgent: 'var(--color-urgent)',
-    high: 'var(--color-high)',
-    medium: 'var(--color-medium)',
-    low: 'var(--color-low)',
   };
 
   const colors = [

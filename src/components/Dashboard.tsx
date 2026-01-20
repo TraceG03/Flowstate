@@ -1,11 +1,10 @@
-import React from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import {
   CheckCircle, Clock, Target, Flame, Calendar, ArrowRight,
   TrendingUp, AlertCircle
 } from 'lucide-react';
-import { format, isToday, isTomorrow, parseISO, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
+import { format, isToday, parseISO, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -34,11 +33,6 @@ export default function Dashboard() {
   const weeklyCompletions = tasks.filter(t =>
     t.completedAt && isWithinInterval(parseISO(t.completedAt), { start: weekStart, end: weekEnd })
   ).length;
-
-  const activeHabits = habits.filter(h => {
-    const todayStr = format(today, 'yyyy-MM-dd');
-    return h.completedDates.includes(todayStr);
-  }).length;
 
   const totalStreaks = habits.reduce((sum, h) => sum + h.streak, 0);
 

@@ -1,9 +1,8 @@
-import React from 'react';
 import { useApp } from '../context/AppContext';
 import {
   LayoutDashboard, Calendar, CheckSquare, FolderKanban, GanttChart,
   Target, Sparkles, BarChart3, MessageSquare, FileText, Clock,
-  Hash, Settings, Moon, Sun, ChevronLeft, Zap
+  Hash, Moon, Sun, ChevronLeft, Zap
 } from 'lucide-react';
 
 const navItems = [

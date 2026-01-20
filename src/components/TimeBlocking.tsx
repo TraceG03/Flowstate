@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
-import { Plus, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
-import { format, addDays, subDays, parseISO, setHours, setMinutes } from 'date-fns';
+import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { format, addDays, subDays, parseISO, setHours } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 
 const hours = Array.from({ length: 16 }, (_, i) => i + 6); // 6 AM to 9 PM
@@ -14,7 +14,7 @@ export default function TimeBlocking() {
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showModal, setShowModal] = useState(false);
-  const [selectedHour, setSelectedHour] = useState<number | null>(null);
+  const [, setSelectedHour] = useState<number | null>(null);
 
   const [newBlock, setNewBlock] = useState({
     taskId: '',

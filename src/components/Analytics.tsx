@@ -1,4 +1,3 @@
-import React from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import {
@@ -6,7 +5,7 @@ import {
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend
 } from 'recharts';
 import {
-  CheckCircle, Clock, TrendingUp, AlertTriangle, Target, Flame
+  CheckCircle, TrendingUp, AlertTriangle, Flame
 } from 'lucide-react';
 import { format, parseISO, subDays, isWithinInterval, startOfWeek, endOfWeek } from 'date-fns';
 

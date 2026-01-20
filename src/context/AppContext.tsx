@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   Task, Event, Project, Habit, Goal, Channel, Template, Reminder,
-  Tag, TimeBlock, Note, TaskStatus, Priority, WeeklyReview
+  Tag, TimeBlock, Note, WeeklyReview
 } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';

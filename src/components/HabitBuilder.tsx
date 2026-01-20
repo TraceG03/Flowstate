@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
 import { Plus, Flame, CheckCircle, TrendingUp, Calendar } from 'lucide-react';
-import { format, subDays, addDays } from 'date-fns';
+import { format, subDays } from 'date-fns';
 
 export default function HabitBuilder() {
   const { state, dispatch, addHabit } = useApp();

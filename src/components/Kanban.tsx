@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
-import { Plus, MoreHorizontal, Calendar, CheckCircle } from 'lucide-react';
+import { Plus, Calendar } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import type { TaskStatus, Priority } from '../types';
 

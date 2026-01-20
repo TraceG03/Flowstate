@@ -80,9 +80,8 @@ export default function Header({ title, onAddClick }: HeaderProps) {
     <header className="header">
       <div className="header-left">
         <button
-          className="header-btn"
+          className="header-btn mobile-menu-btn"
           onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
-          style={{ display: 'none' }}
         >
           <Menu size={20} />
         </button>

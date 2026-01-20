@@ -53,15 +53,23 @@ export default function Sidebar() {
   );
 
   return (
-    <aside className={`sidebar ${!sidebarOpen ? 'collapsed' : ''}`}>
-      <div className="sidebar-header">
-        <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">
-            <Zap size={24} color="white" />
+    <>
+      {/* Mobile overlay - closes sidebar when clicked */}
+      {sidebarOpen && (
+        <div 
+          className="sidebar-overlay"
+          onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
+        />
+      )}
+      <aside className={`sidebar ${!sidebarOpen ? 'collapsed' : ''} ${sidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <div className="sidebar-logo">
+            <div className="sidebar-logo-icon">
+              <Zap size={24} color="white" />
+            </div>
+            {sidebarOpen && <h1>Flowstate</h1>}
           </div>
-          {sidebarOpen && <h1>Flowstate</h1>}
         </div>
-      </div>
 
       <nav className="sidebar-nav">
         <NavSection title="Workspace" items={navItems} />
@@ -83,5 +91,6 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }

@@ -1,14 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
-import { Send, Sparkles, Lightbulb, Calendar, CheckSquare, Target, Wand2 } from 'lucide-react';
+import { Send, Sparkles, Lightbulb, Calendar, CheckSquare, Target, AlertCircle, Zap } from 'lucide-react';
 import { format } from 'date-fns';
+import { chat, isOpenAIConfigured, parseAIResponse, type ProductivityContext, type ChatMessage } from '../lib/openai';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  pending?: {
+    type: 'task' | 'habit' | 'goal';
+    data: Record<string, unknown>;
+  };
 }
 
 const suggestions = [
@@ -19,20 +24,24 @@ const suggestions = [
 ];
 
 export default function AIAssistant() {
-  const { state, applyTemplate } = useApp();
+  const { state, addTask, addHabit, addGoal, applyTemplate } = useApp();
   const { tasks, habits, goals, events } = state;
 
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'assistant',
-      content: `Hello! I'm your AI productivity assistant. I can help you plan your day, suggest goals, create tasks, and optimize your schedule. What would you like to accomplish today?`,
+      content: isOpenAIConfigured 
+        ? `Hello! I'm your AI productivity assistant powered by GPT-4. I have access to your tasks, habits, goals, and schedule - so I can give you personalized advice!\n\n**What can I help you with today?**\n- 📋 Plan your day\n- 🎯 Set meaningful goals\n- 💪 Build better habits\n- ⏰ Optimize your schedule\n- ✨ Create tasks with natural language\n\nJust ask me anything!`
+        : `Hello! I'm your AI productivity assistant. To unlock my full potential with GPT-4, please add your OpenAI API key to the environment variables.\n\nIn the meantime, I can still help with basic suggestions based on your data!`,
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -40,18 +49,58 @@ export default function AIAssistant() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, streamingContent]);
 
-  const generateResponse = (userMessage: string): string => {
+  // Build context for AI
+  const buildContext = (): ProductivityContext => {
+    const today = new Date();
+    const todayStr = format(today, 'yyyy-MM-dd');
+    
+    const completedToday = tasks.filter(t => 
+      t.completedAt && format(new Date(t.completedAt), 'yyyy-MM-dd') === todayStr
+    ).length;
+
+    const pendingTasks = tasks.filter(t => t.status !== 'done');
+    const urgentTasks = pendingTasks.filter(t => t.priority === 'urgent');
+
+    return {
+      tasks: tasks.map(t => ({
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        dueDate: t.dueDate,
+      })),
+      habits: habits.map(h => ({
+        name: h.name,
+        streak: h.streak,
+        frequency: h.frequency,
+      })),
+      goals: goals.map(g => ({
+        title: g.title,
+        progress: g.progress,
+        achieved: g.achieved,
+      })),
+      events: events.map(e => ({
+        title: e.title,
+        startDate: e.startDate,
+        endDate: e.endDate,
+      })),
+      completedToday,
+      pendingTasks: pendingTasks.length,
+      urgentTasks: urgentTasks.length,
+    };
+  };
+
+  // Fallback response generator (when OpenAI not configured)
+  const generateFallbackResponse = (userMessage: string): string => {
     const lowerMessage = userMessage.toLowerCase();
     const pendingTasks = tasks.filter(t => t.status !== 'done');
     const urgentTasks = pendingTasks.filter(t => t.priority === 'urgent');
-    const activeHabits = habits.length;
     const activeGoals = goals.filter(g => !g.achieved).length;
+    const activeHabits = habits.length;
 
-    // Day planning
-    if (lowerMessage.includes('plan') && (lowerMessage.includes('day') || lowerMessage.includes('today'))) {
-      let response = `📋 **Here's your personalized day plan:**\n\n`;
+    if (lowerMessage.includes('plan') || lowerMessage.includes('day')) {
+      let response = `📋 **Your Day Plan:**\n\n`;
       
       if (urgentTasks.length > 0) {
         response += `🔴 **Urgent Tasks (do first):**\n`;
@@ -78,69 +127,33 @@ export default function AIAssistant() {
       return response;
     }
 
-    // Goal suggestions
     if (lowerMessage.includes('goal') || lowerMessage.includes('suggest')) {
       return `🎯 **Suggested Goals Based on Your Activity:**\n\n` +
         `1. **Complete ${Math.max(5, pendingTasks.length)} tasks this week** - Stay productive!\n` +
         `2. **Build a 7-day habit streak** - Consistency is key\n` +
         `3. **Reduce urgent tasks to zero** - Better planning ahead\n` +
         `4. **Review and reflect weekly** - Track your growth\n\n` +
-        `Would you like me to create any of these goals for you?`;
+        `*Add your OpenAI API key to unlock personalized AI suggestions!*`;
     }
 
-    // Schedule optimization
     if (lowerMessage.includes('schedule') || lowerMessage.includes('optimize')) {
       const todayEvents = events.filter(e => 
         format(new Date(e.startDate), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
       );
 
-      return `📅 **Schedule Optimization Tips:**\n\n` +
+      return `📅 **Schedule Overview:**\n\n` +
         `You have ${todayEvents.length} events today and ${pendingTasks.length} pending tasks.\n\n` +
         `**Recommendations:**\n` +
         `- Block 2-hour focus time for deep work\n` +
         `- Group similar tasks together\n` +
-        `- Leave buffer time between meetings\n` +
-        `- Schedule energy-intensive tasks for your peak hours\n\n` +
-        `Would you like me to help you create time blocks?`;
+        `- Leave buffer time between meetings\n\n` +
+        `*Add your OpenAI API key for AI-powered schedule optimization!*`;
     }
 
-    // Productivity tips
-    if (lowerMessage.includes('productivity') || lowerMessage.includes('tips')) {
-      return `💪 **Productivity Tips:**\n\n` +
-        `1. **Use the 2-minute rule** - If it takes less than 2 minutes, do it now\n` +
-        `2. **Time blocking** - Schedule specific times for specific tasks\n` +
-        `3. **Eat the frog** - Do the hardest task first\n` +
-        `4. **Limit work-in-progress** - Focus on finishing, not starting\n` +
-        `5. **Review weekly** - Reflect on what worked and what didn't\n\n` +
-        `You currently have ${habits.length} habits tracked. Consistent habits compound over time!`;
-    }
-
-    // Create task
-    if (lowerMessage.includes('create task') || lowerMessage.includes('add task') || lowerMessage.includes('new task')) {
-      return `✨ I can help you create a task! Please tell me:\n\n` +
-        `- What's the task title?\n` +
-        `- What priority? (urgent, high, medium, low)\n` +
-        `- When is it due?\n\n` +
-        `Or just click the "Add New" button to use the task form directly.`;
-    }
-
-    // Create habit
-    if (lowerMessage.includes('habit') || lowerMessage.includes('routine')) {
-      return `🔥 **Building habits is powerful!**\n\n` +
-        `You're currently tracking ${activeHabits} habits.\n\n` +
-        `**Suggested habits to consider:**\n` +
-        `- Morning meditation (5-10 minutes)\n` +
-        `- Daily exercise\n` +
-        `- Reading for 30 minutes\n` +
-        `- Journaling before bed\n` +
-        `- Drinking 8 glasses of water\n\n` +
-        `Head to the Habit Builder to create and track new habits!`;
-    }
-
-    // Status/overview
-    if (lowerMessage.includes('status') || lowerMessage.includes('overview') || lowerMessage.includes('how am i doing')) {
+    if (lowerMessage.includes('status') || lowerMessage.includes('overview')) {
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
       const completedToday = tasks.filter(t => 
-        t.completedAt && format(new Date(t.completedAt), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
+        t.completedAt && format(new Date(t.completedAt), 'yyyy-MM-dd') === todayStr
       ).length;
 
       return `📊 **Your Current Status:**\n\n` +
@@ -154,14 +167,12 @@ export default function AIAssistant() {
           : `Great job staying on top of things! 🌟`);
     }
 
-    // Default response
-    return `I understand you're asking about "${userMessage}". Here are some things I can help with:\n\n` +
-      `- **Plan your day** - Get a personalized task schedule\n` +
-      `- **Suggest goals** - Based on your current activity\n` +
-      `- **Optimize schedule** - Better time management\n` +
-      `- **Productivity tips** - Proven strategies\n` +
-      `- **Status overview** - See where you stand\n\n` +
-      `What would you like to explore?`;
+    return `I can help you with:\n\n` +
+      `- **"Plan my day"** - Get a task schedule\n` +
+      `- **"Suggest goals"** - Based on your activity\n` +
+      `- **"Optimize schedule"** - Better time management\n` +
+      `- **"Status overview"** - See where you stand\n\n` +
+      `*For smarter AI responses, add your OpenAI API key!*`;
   };
 
   const handleSend = async () => {
@@ -177,116 +188,199 @@ export default function AIAssistant() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
+    setStreamingContent('');
 
-    // Simulate AI thinking
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (isOpenAIConfigured) {
+      try {
+        // Build chat history for context
+        const chatHistory: ChatMessage[] = messages
+          .slice(-10) // Last 10 messages for context
+          .map(m => ({
+            role: m.role,
+            content: m.content,
+          }));
+        
+        chatHistory.push({ role: 'user', content: input });
 
-    const response = generateResponse(input);
+        // Stream the response
+        let fullResponse = '';
+        await chat(
+          chatHistory,
+          buildContext(),
+          (chunk) => {
+            fullResponse += chunk;
+            setStreamingContent(fullResponse);
+          }
+        );
 
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: response,
-      timestamp: new Date(),
-    };
+        // Parse for actionable items
+        const parsed = parseAIResponse(fullResponse);
 
-    setMessages(prev => [...prev, assistantMessage]);
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: parsed.text,
+          timestamp: new Date(),
+          pending: parsed.task 
+            ? { type: 'task', data: parsed.task }
+            : parsed.habit 
+              ? { type: 'habit', data: parsed.habit }
+              : parsed.goal 
+                ? { type: 'goal', data: parsed.goal }
+                : undefined,
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
+      } catch (error) {
+        console.error('AI Error:', error);
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `⚠️ Sorry, I encountered an error. ${error instanceof Error ? error.message : 'Please try again.'}`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+    } else {
+      // Fallback to simulated responses
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const response = generateFallbackResponse(input);
+      
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: response,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+    }
+
     setIsTyping(false);
+    setStreamingContent('');
+  };
+
+  const handleCreateItem = async (message: Message) => {
+    if (!message.pending) return;
+
+    const { type, data } = message.pending;
+
+    try {
+      if (type === 'task' && data.title) {
+        await addTask({
+          title: data.title as string,
+          description: '',
+          status: 'todo',
+          priority: (data.priority as 'urgent' | 'high' | 'medium' | 'low') || 'medium',
+          tags: [],
+          dueDate: (data.dueDate as string) || null,
+          startDate: null,
+          endDate: null,
+          projectId: null,
+          completedAt: null,
+          assignee: null,
+          color: '#6366f1',
+        });
+
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `✅ Created task: **${data.title}**`,
+          timestamp: new Date(),
+        }]);
+      } else if (type === 'habit' && data.name) {
+        await addHabit({
+          name: data.name as string,
+          description: (data.description as string) || '',
+          frequency: (data.frequency as 'daily' | 'weekly' | 'monthly') || 'daily',
+          targetCount: 1,
+          color: '#10b981',
+        });
+
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `✅ Created habit: **${data.name}**`,
+          timestamp: new Date(),
+        }]);
+      } else if (type === 'goal' && data.title) {
+        await addGoal({
+          title: data.title as string,
+          description: (data.description as string) || '',
+          targetDate: (data.targetDate as string) || null,
+          milestones: [],
+        });
+
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `✅ Created goal: **${data.title}**`,
+          timestamp: new Date(),
+        }]);
+      }
+
+      // Remove the pending action from the message
+      setMessages(prev => prev.map(m => 
+        m.id === message.id ? { ...m, pending: undefined } : m
+      ));
+    } catch (error) {
+      console.error('Error creating item:', error);
+    }
   };
 
   const handleSuggestionClick = (action: string) => {
     const prompts: Record<string, string> = {
-      plan_day: 'Help me plan my day',
-      suggest_goals: 'Suggest goals for this week',
-      optimize_schedule: 'Help me optimize my schedule',
-      productivity_tips: 'Give me productivity tips',
+      plan_day: 'Help me plan my day based on my current tasks and schedule',
+      suggest_goals: 'Suggest meaningful goals I should set this week based on my activity',
+      optimize_schedule: 'Analyze my schedule and suggest ways to be more productive',
+      productivity_tips: 'Give me personalized productivity tips based on my patterns',
     };
     setInput(prompts[action] || '');
-    setTimeout(() => handleSend(), 100);
+    inputRef.current?.focus();
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   return (
     <>
       <Header title="AI Assistant" />
-      <div className="content">
-        <div className="grid grid-3" style={{ gap: 24 }}>
-          {/* Chat Interface */}
-          <div style={{ gridColumn: 'span 2' }}>
-            <div className="ai-chat">
-              <div className="ai-chat-messages">
-                {messages.map(message => (
-                  <div
-                    key={message.id}
-                    className={`ai-message ${message.role}`}
-                  >
-                    {message.role === 'assistant' && (
-                      <Sparkles
-                        size={16}
-                        color="var(--accent-primary)"
-                        style={{ marginBottom: 8 }}
-                      />
-                    )}
-                    <div style={{ whiteSpace: 'pre-wrap' }}>
-                      {message.content.split('**').map((part, i) => 
-                        i % 2 === 0 ? part : <strong key={i}>{part}</strong>
-                      )}
-                    </div>
-                    <div
-                      className="text-sm text-muted"
-                      style={{ marginTop: 8 }}
-                    >
-                      {format(message.timestamp, 'h:mm a')}
-                    </div>
-                  </div>
-                ))}
-                {isTyping && (
-                  <div className="ai-message assistant">
-                    <div className="flex items-center gap-2">
-                      <div className="typing-indicator">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                      </div>
-                      <span className="text-muted">AI is thinking...</span>
-                    </div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
+      <div className="ai-assistant">
+        <div className="ai-chat-container">
+          {/* Sidebar with context */}
+          <div className="ai-sidebar">
+            <div className="ai-status-card">
+              <div className="ai-status-header">
+                <Zap size={20} color="var(--accent-primary)" />
+                <span>AI Status</span>
               </div>
-
-              <div className="ai-chat-input">
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="Ask me anything about your tasks, schedule, or productivity..."
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                />
-                <button className="btn btn-primary" onClick={handleSend}>
-                  <Send size={18} />
-                </button>
-              </div>
+              {isOpenAIConfigured ? (
+                <div className="ai-status-badge success">
+                  <span className="status-dot"></span>
+                  GPT-4o Mini Connected
+                </div>
+              ) : (
+                <div className="ai-status-badge warning">
+                  <AlertCircle size={14} />
+                  API Key Required
+                </div>
+              )}
             </div>
-          </div>
 
-          {/* Quick Actions */}
-          <div>
             <div className="card">
-              <h3 className="card-title mb-4">
-                <Wand2 size={20} className="mr-2" style={{ display: 'inline' }} />
-                Quick Prompts
-              </h3>
-              <div className="flex flex-col gap-3">
-                {suggestions.map((suggestion, i) => (
+              <h3 className="card-title">Quick Actions</h3>
+              <div className="ai-suggestions">
+                {suggestions.map((suggestion, index) => (
                   <button
-                    key={i}
-                    className="btn btn-secondary"
-                    style={{ justifyContent: 'flex-start' }}
+                    key={index}
+                    className="ai-suggestion-btn"
                     onClick={() => handleSuggestionClick(suggestion.action)}
                   >
-                    <suggestion.icon size={18} />
-                    {suggestion.text}
+                    <suggestion.icon size={16} />
+                    <span>{suggestion.text}</span>
                   </button>
                 ))}
               </div>
@@ -317,32 +411,116 @@ export default function AIAssistant() {
               </div>
             </div>
           </div>
+
+          {/* Main chat area */}
+          <div className="ai-chat-main">
+            <div className="ai-messages">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`ai-message ${message.role === 'user' ? 'user' : 'assistant'}`}
+                >
+                  {message.role === 'assistant' && (
+                    <div className="ai-avatar">
+                      <Sparkles size={18} />
+                    </div>
+                  )}
+                  <div className="ai-message-content">
+                    <div className="ai-message-text" dangerouslySetInnerHTML={{ 
+                      __html: message.content
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n/g, '<br/>')
+                    }} />
+                    {message.pending && (
+                      <div className="ai-action-card">
+                        <p>Would you like me to create this {message.pending.type}?</p>
+                        <div className="ai-action-buttons">
+                          <button 
+                            className="btn btn-primary btn-sm"
+                            onClick={() => handleCreateItem(message)}
+                          >
+                            Create {message.pending.type}
+                          </button>
+                          <button 
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setMessages(prev => 
+                              prev.map(m => m.id === message.id ? { ...m, pending: undefined } : m)
+                            )}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <span className="ai-message-time">
+                      {format(message.timestamp, 'h:mm a')}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              
+              {/* Streaming response */}
+              {isTyping && streamingContent && (
+                <div className="ai-message assistant">
+                  <div className="ai-avatar">
+                    <Sparkles size={18} />
+                  </div>
+                  <div className="ai-message-content">
+                    <div className="ai-message-text" dangerouslySetInnerHTML={{ 
+                      __html: streamingContent
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n/g, '<br/>')
+                    }} />
+                  </div>
+                </div>
+              )}
+              
+              {/* Typing indicator */}
+              {isTyping && !streamingContent && (
+                <div className="ai-message assistant">
+                  <div className="ai-avatar">
+                    <Sparkles size={18} />
+                  </div>
+                  <div className="ai-typing">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="ai-input-container">
+              <div className="ai-input-wrapper">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  placeholder={isOpenAIConfigured 
+                    ? "Ask me anything about your productivity..." 
+                    : "Add OpenAI API key for full AI features..."}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  className="ai-input"
+                />
+                <button 
+                  className="ai-send-btn"
+                  onClick={handleSend}
+                  disabled={!input.trim() || isTyping}
+                >
+                  <Send size={20} />
+                </button>
+              </div>
+              <p className="ai-input-hint">
+                {isOpenAIConfigured 
+                  ? 'Try: "Create a task to review project proposal by Friday"' 
+                  : 'API key required for task creation via AI'}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-
-      <style>{`
-        .typing-indicator {
-          display: flex;
-          gap: 4px;
-        }
-        .typing-indicator span {
-          width: 8px;
-          height: 8px;
-          background: var(--accent-primary);
-          border-radius: 50%;
-          animation: typing 1.4s infinite ease-in-out;
-        }
-        .typing-indicator span:nth-child(2) {
-          animation-delay: 0.2s;
-        }
-        .typing-indicator span:nth-child(3) {
-          animation-delay: 0.4s;
-        }
-        @keyframes typing {
-          0%, 100% { transform: translateY(0); opacity: 0.5; }
-          50% { transform: translateY(-4px); opacity: 1; }
-        }
-      `}</style>
     </>
   );
 }

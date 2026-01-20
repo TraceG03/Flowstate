@@ -90,7 +90,7 @@ export interface Goal {
   id: string;
   title: string;
   description: string;
-  targetDate: string;
+  targetDate: string | null;
   progress: number;
   milestones: Milestone[];
   achieved: boolean;

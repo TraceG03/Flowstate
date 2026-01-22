@@ -393,13 +393,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadData();
   }, [user]);
 
-  // Save to localStorage in demo mode
+  // Save to localStorage in demo mode (when Supabase not configured OR user not logged in)
   useEffect(() => {
-    if (!isSupabaseConfigured && !state.loading) {
+    if ((!isSupabaseConfigured || !user) && !state.loading) {
       const { loading, ...stateToSave } = state;
       localStorage.setItem('productivityAppState', JSON.stringify(stateToSave));
     }
-  }, [state]);
+  }, [state, user]);
 
   const addTask = async (task: Omit<Task, 'id' | 'createdAt' | 'notes' | 'timeBlocks'>) => {
     const newTask: Task = {

@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
-import { Plus, Target, CheckCircle, Circle, Trophy, Trash2 } from 'lucide-react';
+import { Plus, Target, CheckCircle, Circle, Trophy, Trash2, Edit2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
+import type { Goal } from '../types';
 
 export default function Goals() {
   const { state, addGoal, updateGoal, deleteGoal } = useApp();
   const { goals } = state;
 
   const [showModal, setShowModal] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [newGoal, setNewGoal] = useState({
     title: '',
     description: '',
@@ -26,20 +28,14 @@ export default function Goals() {
     addGoal({
       title: newGoal.title,
       description: newGoal.description,
-      targetDate: newGoal.targetDate,
+      targetDate: newGoal.targetDate || null,
       milestones: newGoal.milestones.map(m => ({
         ...m,
         completedAt: null,
       })),
     });
 
-    setNewGoal({
-      title: '',
-      description: '',
-      targetDate: '',
-      milestones: [],
-    });
-    setShowModal(false);
+    resetForm();
   };
 
   const addMilestoneToForm = () => {
@@ -76,6 +72,53 @@ export default function Goals() {
     deleteGoal(id);
   };
 
+  const startEditGoal = (goal: Goal) => {
+    setEditingGoal(goal);
+    setNewGoal({
+      title: goal.title,
+      description: goal.description,
+      targetDate: goal.targetDate || '',
+      milestones: goal.milestones.map(m => ({ id: m.id, title: m.title, completed: m.completed })),
+    });
+    setShowModal(true);
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGoal || !newGoal.title) return;
+
+    const completedCount = newGoal.milestones.filter(m => m.completed).length;
+    const progress = newGoal.milestones.length > 0 
+      ? Math.round((completedCount / newGoal.milestones.length) * 100) 
+      : editingGoal.progress;
+
+    updateGoal({
+      ...editingGoal,
+      title: newGoal.title,
+      description: newGoal.description,
+      targetDate: newGoal.targetDate || null,
+      milestones: newGoal.milestones.map(m => ({
+        ...m,
+        completedAt: m.completed ? new Date().toISOString() : null,
+      })),
+      progress,
+      achieved: progress === 100,
+    });
+
+    resetForm();
+  };
+
+  const resetForm = () => {
+    setNewGoal({
+      title: '',
+      description: '',
+      targetDate: '',
+      milestones: [],
+    });
+    setEditingGoal(null);
+    setShowModal(false);
+  };
+
   const activeGoals = goals.filter(g => !g.achieved);
   const achievedGoals = goals.filter(g => g.achieved);
 
@@ -108,12 +151,22 @@ export default function Goals() {
                 <div key={goal.id} className="card">
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="font-semibold">{goal.title}</h4>
-                    <button
-                      className="btn btn-secondary btn-icon"
-                      onClick={() => handleDeleteGoal(goal.id)}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        className="btn btn-secondary btn-icon"
+                        onClick={() => startEditGoal(goal)}
+                        title="Edit goal"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-icon"
+                        onClick={() => handleDeleteGoal(goal.id)}
+                        title="Delete goal"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
 
                   <p className="text-sm text-muted mb-4">{goal.description}</p>
@@ -204,8 +257,8 @@ export default function Goals() {
       </div>
 
       {showModal && (
-        <Modal title="Create Goal" onClose={() => setShowModal(false)}>
-          <form onSubmit={handleSubmit}>
+        <Modal title={editingGoal ? "Edit Goal" : "Create Goal"} onClose={resetForm}>
+          <form onSubmit={editingGoal ? handleEditSubmit : handleSubmit}>
             <div className="input-group">
               <label className="input-label">Goal Title</label>
               <input
@@ -281,12 +334,12 @@ export default function Goals() {
             </div>
 
             <div className="modal-footer" style={{ margin: '0 -24px -24px', padding: '20px 24px' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+              <button type="button" className="btn btn-secondary" onClick={resetForm}>
                 Cancel
               </button>
               <button type="submit" className="btn btn-primary">
-                <Plus size={18} />
-                Create Goal
+                {editingGoal ? <Edit2 size={18} /> : <Plus size={18} />}
+                {editingGoal ? 'Save Changes' : 'Create Goal'}
               </button>
             </div>
           </form>

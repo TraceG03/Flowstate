@@ -4,16 +4,18 @@ import Header from './Header';
 import Modal from './Modal';
 import {
   CheckCircle, Calendar,
-  Plus, Filter, List, Grid, Trash2
+  Plus, Filter, List, Grid, Trash2, Edit2, Clock, Tag
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import type { Priority, TaskStatus } from '../types';
+import type { Priority, TaskStatus, Task } from '../types';
 
 export default function Tasks() {
   const { state, addTask, updateTask, deleteTask } = useApp();
   const { tasks, tags } = state;
 
   const [showModal, setShowModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [filter, setFilter] = useState<{ status: string; priority: string; tag: string }>({
     status: 'all',
     priority: 'all',
@@ -79,6 +81,61 @@ export default function Tasks() {
 
   const handleDeleteTask = (id: string) => {
     deleteTask(id);
+    setSelectedTask(null);
+  };
+
+  const openTaskDetail = (task: Task) => {
+    setSelectedTask(task);
+    setIsEditing(false);
+  };
+
+  const startEditTask = () => {
+    if (!selectedTask) return;
+    setNewTask({
+      title: selectedTask.title,
+      description: selectedTask.description,
+      priority: selectedTask.priority,
+      status: selectedTask.status,
+      tags: selectedTask.tags,
+      dueDate: selectedTask.dueDate || '',
+      color: selectedTask.color,
+    });
+    setIsEditing(true);
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTask || !newTask.title) return;
+
+    updateTask({
+      ...selectedTask,
+      title: newTask.title,
+      description: newTask.description,
+      priority: newTask.priority,
+      status: newTask.status,
+      tags: newTask.tags,
+      dueDate: newTask.dueDate || null,
+      color: newTask.color,
+      completedAt: newTask.status === 'done' && selectedTask.status !== 'done' 
+        ? new Date().toISOString() 
+        : newTask.status !== 'done' ? null : selectedTask.completedAt,
+    });
+
+    closeTaskDetail();
+  };
+
+  const closeTaskDetail = () => {
+    setSelectedTask(null);
+    setIsEditing(false);
+    setNewTask({
+      title: '',
+      description: '',
+      priority: 'medium',
+      status: 'todo',
+      tags: [],
+      dueDate: '',
+      color: '#6366f1',
+    });
   };
 
   const colors = [
@@ -172,6 +229,8 @@ export default function Tasks() {
                 <div
                   key={task.id}
                   className={`task-item ${task.status === 'done' ? 'completed' : ''}`}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => openTaskDetail(task)}
                 >
                   <div
                     style={{
@@ -183,7 +242,7 @@ export default function Tasks() {
                   />
                   <div
                     className={`task-checkbox ${task.status === 'done' ? 'checked' : ''}`}
-                    onClick={() => toggleTaskStatus(task)}
+                    onClick={(e) => { e.stopPropagation(); toggleTaskStatus(task); }}
                   >
                     {task.status === 'done' && <CheckCircle size={14} />}
                   </div>
@@ -218,7 +277,7 @@ export default function Tasks() {
                   <div className="task-actions">
                     <button
                       className="btn btn-secondary btn-icon"
-                      onClick={() => handleDeleteTask(task.id)}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -230,7 +289,12 @@ export default function Tasks() {
         ) : (
           <div className="grid grid-3">
             {filteredTasks.map(task => (
-              <div key={task.id} className="card">
+              <div 
+                key={task.id} 
+                className="card"
+                style={{ cursor: 'pointer' }}
+                onClick={() => openTaskDetail(task)}
+              >
                 <div
                   style={{
                     width: '100%',
@@ -246,7 +310,7 @@ export default function Tasks() {
                   </span>
                   <div
                     className={`task-checkbox ${task.status === 'done' ? 'checked' : ''}`}
-                    onClick={() => toggleTaskStatus(task)}
+                    onClick={(e) => { e.stopPropagation(); toggleTaskStatus(task); }}
                   >
                     {task.status === 'done' && <CheckCircle size={14} />}
                   </div>
@@ -375,6 +439,248 @@ export default function Tasks() {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Task Detail Modal */}
+      {selectedTask && (
+        <Modal title={isEditing ? "Edit Task" : "Task Details"} onClose={closeTaskDetail}>
+          {isEditing ? (
+            <form onSubmit={handleEditSubmit}>
+              <div className="input-group">
+                <label className="input-label">Task Title</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="What needs to be done?"
+                  value={newTask.title}
+                  onChange={(e) => setNewTask(prev => ({ ...prev, title: e.target.value }))}
+                  autoFocus
+                />
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Description</label>
+                <textarea
+                  className="input"
+                  placeholder="Add details..."
+                  value={newTask.description}
+                  onChange={(e) => setNewTask(prev => ({ ...prev, description: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid grid-2">
+                <div className="input-group">
+                  <label className="input-label">Status</label>
+                  <select
+                    className="input"
+                    value={newTask.status}
+                    onChange={(e) => setNewTask(prev => ({ ...prev, status: e.target.value as TaskStatus }))}
+                  >
+                    <option value="todo">To Do</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="review">Review</option>
+                    <option value="done">Done</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Priority</label>
+                  <select
+                    className="input"
+                    value={newTask.priority}
+                    onChange={(e) => setNewTask(prev => ({ ...prev, priority: e.target.value as Priority }))}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Due Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={newTask.dueDate}
+                  onChange={(e) => setNewTask(prev => ({ ...prev, dueDate: e.target.value }))}
+                />
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Tags</label>
+                <div className="flex gap-2 flex-wrap">
+                  {tags.map(tag => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      className="tag"
+                      style={{
+                        background: newTask.tags.includes(tag.id) ? tag.color : 'transparent',
+                        borderColor: tag.color,
+                        color: newTask.tags.includes(tag.id) ? 'white' : tag.color,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => {
+                        setNewTask(prev => ({
+                          ...prev,
+                          tags: prev.tags.includes(tag.id)
+                            ? prev.tags.filter(t => t !== tag.id)
+                            : [...prev.tags, tag.id],
+                        }));
+                      }}
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Color</label>
+                <div className="flex gap-2">
+                  {colors.map(color => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setNewTask(prev => ({ ...prev, color }))}
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        background: color,
+                        border: newTask.color === color ? '3px solid white' : 'none',
+                        cursor: 'pointer',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ margin: '0 -24px -24px', padding: '20px 24px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsEditing(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  <Edit2 size={18} />
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div>
+              {/* Task Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <div
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 6,
+                    background: selectedTask.color,
+                  }}
+                />
+                <h2 style={{ margin: 0, fontSize: 20 }}>{selectedTask.title}</h2>
+              </div>
+
+              {/* Description */}
+              {selectedTask.description && (
+                <p className="text-muted" style={{ marginBottom: 16 }}>
+                  {selectedTask.description}
+                </p>
+              )}
+
+              {/* Status and Priority */}
+              <div className="card" style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', gap: 24 }}>
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock size={16} />
+                      <span className="text-muted" style={{ fontSize: 12 }}>Status</span>
+                    </div>
+                    <span 
+                      className="priority-badge"
+                      style={{ 
+                        background: selectedTask.status === 'done' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(99, 102, 241, 0.2)',
+                        color: selectedTask.status === 'done' ? 'var(--color-success)' : 'var(--accent-primary)',
+                        textTransform: 'capitalize'
+                      }}
+                    >
+                      {selectedTask.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-muted" style={{ fontSize: 12 }}>Priority</span>
+                    </div>
+                    <span className={`priority-badge priority-${selectedTask.priority}`}>
+                      {selectedTask.priority}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Due Date */}
+              {selectedTask.dueDate && (
+                <div className="card" style={{ marginBottom: 16 }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar size={16} />
+                    <span className="text-muted" style={{ fontSize: 12 }}>Due Date</span>
+                  </div>
+                  <p style={{ margin: 0, fontWeight: 500 }}>
+                    {format(parseISO(selectedTask.dueDate), 'MMMM d, yyyy')}
+                  </p>
+                </div>
+              )}
+
+              {/* Tags */}
+              {selectedTask.tags.length > 0 && (
+                <div className="card" style={{ marginBottom: 16 }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Tag size={16} />
+                    <span className="text-muted" style={{ fontSize: 12 }}>Tags</span>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {selectedTask.tags.map(tagId => {
+                      const tag = tags.find(t => t.id === tagId);
+                      return tag ? (
+                        <span
+                          key={tag.id}
+                          className="tag"
+                          style={{ borderColor: tag.color, color: tag.color }}
+                        >
+                          {tag.name}
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Created Date */}
+              <div className="text-sm text-muted" style={{ marginBottom: 16 }}>
+                Created: {format(parseISO(selectedTask.createdAt), 'MMM d, yyyy h:mm a')}
+                {selectedTask.completedAt && (
+                  <span> • Completed: {format(parseISO(selectedTask.completedAt), 'MMM d, yyyy h:mm a')}</span>
+                )}
+              </div>
+
+              <div className="modal-footer" style={{ margin: '0 -24px -24px', padding: '20px 24px' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => handleDeleteTask(selectedTask.id)}
+                >
+                  <Trash2 size={16} />
+                  Delete
+                </button>
+                <button type="button" className="btn btn-primary" onClick={startEditTask}>
+                  <Edit2 size={16} />
+                  Edit
+                </button>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
     </>

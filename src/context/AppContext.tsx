@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useEffect, type ReactNode } from
 import { v4 as uuidv4 } from 'uuid';
 import type {
   Task, Event, Project, Habit, Goal, Channel, Template, Reminder,
-  Tag, TimeBlock, Note, WeeklyReview
+  Tag, TimeBlock, Note, WeeklyReview, NoteItem
 } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
@@ -18,6 +18,7 @@ interface AppState {
   reminders: Reminder[];
   tags: Tag[];
   weeklyReviews: WeeklyReview[];
+  notes: NoteItem[];
   currentView: string;
   selectedDate: string;
   sidebarOpen: boolean;
@@ -62,6 +63,10 @@ type Action =
   | { type: 'ADD_TASK_NOTE'; payload: { taskId: string; note: Note } }
   | { type: 'ADD_WEEKLY_REVIEW'; payload: WeeklyReview }
   | { type: 'SET_WEEKLY_REVIEWS'; payload: WeeklyReview[] }
+  | { type: 'ADD_NOTE'; payload: NoteItem }
+  | { type: 'UPDATE_NOTE'; payload: NoteItem }
+  | { type: 'DELETE_NOTE'; payload: string }
+  | { type: 'SET_NOTES'; payload: NoteItem[] }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'LOAD_STATE'; payload: Partial<AppState> };
 
@@ -127,6 +132,7 @@ const initialState: AppState = {
   reminders: [],
   tags: initialTags,
   weeklyReviews: [],
+  notes: [],
   currentView: 'dashboard',
   selectedDate: new Date().toISOString().split('T')[0],
   sidebarOpen: true,
@@ -283,6 +289,17 @@ function appReducer(state: AppState, action: Action): AppState {
       return { ...state, weeklyReviews: action.payload };
     case 'ADD_WEEKLY_REVIEW':
       return { ...state, weeklyReviews: [...state.weeklyReviews, action.payload] };
+    case 'ADD_NOTE':
+      return { ...state, notes: [action.payload, ...state.notes] };
+    case 'UPDATE_NOTE':
+      return {
+        ...state,
+        notes: state.notes.map(n => n.id === action.payload.id ? action.payload : n)
+      };
+    case 'DELETE_NOTE':
+      return { ...state, notes: state.notes.filter(n => n.id !== action.payload) };
+    case 'SET_NOTES':
+      return { ...state, notes: action.payload };
     case 'LOAD_STATE':
       return { ...state, ...action.payload, loading: false };
     default:
@@ -293,11 +310,32 @@ function appReducer(state: AppState, action: Action): AppState {
 interface AppContextType {
   state: AppState;
   dispatch: React.Dispatch<Action>;
+  // Task operations
   addTask: (task: Omit<Task, 'id' | 'createdAt' | 'notes' | 'timeBlocks'>) => Promise<void>;
+  updateTask: (task: Task) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
+  // Event operations
   addEvent: (event: Omit<Event, 'id'>) => Promise<void>;
+  updateEvent: (event: Event) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
+  // Project operations
   addProject: (project: Omit<Project, 'id' | 'progress'>) => Promise<void>;
+  updateProject: (project: Project) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
+  // Habit operations
   addHabit: (habit: Omit<Habit, 'id' | 'completedDates' | 'streak' | 'createdAt'>) => Promise<void>;
+  updateHabit: (habit: Habit) => Promise<void>;
+  toggleHabit: (habitId: string, date: string) => Promise<void>;
+  deleteHabit: (id: string) => Promise<void>;
+  // Goal operations
   addGoal: (goal: Omit<Goal, 'id' | 'achieved' | 'progress'>) => Promise<void>;
+  updateGoal: (goal: Goal) => Promise<void>;
+  deleteGoal: (id: string) => Promise<void>;
+  // Note operations
+  addNote: (note: Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateNote: (note: NoteItem) => Promise<void>;
+  deleteNote: (id: string) => Promise<void>;
+  // Template operations
   applyTemplate: (templateId: string) => void;
 }
 
@@ -307,13 +345,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const { user } = useAuth();
 
-  // Load data from Supabase or localStorage
+  // Load data from Supabase (if configured and logged in) or localStorage
   useEffect(() => {
     async function loadData() {
       dispatch({ type: 'SET_LOADING', payload: true });
 
       if (isSupabaseConfigured && supabase && user) {
-        // Load from Supabase
+        // Load from Supabase when user is logged in
         try {
           const [
             { data: tasks },
@@ -321,12 +359,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             { data: projects },
             { data: habits },
             { data: goals },
+            { data: notes },
           ] = await Promise.all([
             supabase.from('tasks').select('*').eq('user_id', user.id),
             supabase.from('events').select('*').eq('user_id', user.id),
             supabase.from('projects').select('*').eq('user_id', user.id),
             supabase.from('habits').select('*').eq('user_id', user.id),
             supabase.from('goals').select('*').eq('user_id', user.id),
+            supabase.from('notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
           ]);
 
           dispatch({
@@ -367,39 +407,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 milestones: [],
                 targetDate: g.target_date,
               })),
+              notes: (notes || []).map(n => ({
+                ...n,
+                createdAt: n.created_at,
+                updatedAt: n.updated_at,
+              })),
             },
           });
         } catch (error) {
           console.error('Error loading data from Supabase:', error);
+          // Fallback to localStorage on error
+          loadFromLocalStorage();
+        }
+      } else {
+        // Load from localStorage (demo mode or not logged in)
+        loadFromLocalStorage();
+      }
+    }
+
+    function loadFromLocalStorage() {
+      const saved = localStorage.getItem('productivityAppState');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          dispatch({ type: 'LOAD_STATE', payload: parsed });
+        } catch (e) {
+          console.error('Failed to load saved state');
           dispatch({ type: 'SET_LOADING', payload: false });
         }
       } else {
-        // Load from localStorage (demo mode)
-        const saved = localStorage.getItem('productivityAppState');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            dispatch({ type: 'LOAD_STATE', payload: parsed });
-          } catch (e) {
-            console.error('Failed to load saved state');
-            dispatch({ type: 'SET_LOADING', payload: false });
-          }
-        } else {
-          dispatch({ type: 'SET_LOADING', payload: false });
-        }
+        dispatch({ type: 'SET_LOADING', payload: false });
       }
     }
 
     loadData();
   }, [user]);
 
-  // Save to localStorage in demo mode (when Supabase not configured OR user not logged in)
+  // Always save to localStorage (acts as local cache/backup)
   useEffect(() => {
-    if ((!isSupabaseConfigured || !user) && !state.loading) {
+    if (!state.loading) {
       const { loading, ...stateToSave } = state;
       localStorage.setItem('productivityAppState', JSON.stringify(stateToSave));
     }
-  }, [state, user]);
+  }, [state]);
+
+  // Apply dark/light mode to the document
+  useEffect(() => {
+    if (state.darkMode) {
+      document.documentElement.classList.remove('light-mode');
+      document.documentElement.classList.add('dark-mode');
+    } else {
+      document.documentElement.classList.remove('dark-mode');
+      document.documentElement.classList.add('light-mode');
+    }
+  }, [state.darkMode]);
 
   const addTask = async (task: Omit<Task, 'id' | 'createdAt' | 'notes' | 'timeBlocks'>) => {
     const newTask: Task = {
@@ -520,6 +581,217 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'ADD_GOAL', payload: newGoal });
   };
 
+  // ============ UPDATE FUNCTIONS ============
+
+  const updateTask = async (task: Task) => {
+    // Update local state first for immediate UI feedback
+    dispatch({ type: 'UPDATE_TASK', payload: task });
+
+    // Sync to Supabase if configured and user is logged in
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('tasks').update({
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        tags: task.tags,
+        due_date: task.dueDate,
+        start_date: task.startDate,
+        end_date: task.endDate,
+        project_id: task.projectId,
+        completed_at: task.completedAt,
+        color: task.color,
+      }).eq('id', task.id).eq('user_id', user.id);
+      if (error) console.error('Error updating task:', error);
+    }
+  };
+
+  const updateEvent = async (event: Event) => {
+    dispatch({ type: 'UPDATE_EVENT', payload: event });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('events').update({
+        title: event.title,
+        description: event.description,
+        start_date: event.startDate,
+        end_date: event.endDate,
+        all_day: event.allDay,
+        color: event.color,
+        recurring: event.recurring,
+        reminder: event.reminder,
+      }).eq('id', event.id).eq('user_id', user.id);
+      if (error) console.error('Error updating event:', error);
+    }
+  };
+
+  const updateProject = async (project: Project) => {
+    dispatch({ type: 'UPDATE_PROJECT', payload: project });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('projects').update({
+        name: project.name,
+        description: project.description,
+        color: project.color,
+        start_date: project.startDate,
+        end_date: project.endDate,
+        progress: project.progress,
+      }).eq('id', project.id).eq('user_id', user.id);
+      if (error) console.error('Error updating project:', error);
+    }
+  };
+
+  const updateHabit = async (habit: Habit) => {
+    dispatch({ type: 'UPDATE_HABIT', payload: habit });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('habits').update({
+        name: habit.name,
+        description: habit.description,
+        frequency: habit.frequency,
+        target_count: habit.targetCount,
+        color: habit.color,
+        completed_dates: habit.completedDates,
+        streak: habit.streak,
+      }).eq('id', habit.id).eq('user_id', user.id);
+      if (error) console.error('Error updating habit:', error);
+    }
+  };
+
+  const toggleHabit = async (habitId: string, date: string) => {
+    // Calculate the new state
+    const habit = state.habits.find(h => h.id === habitId);
+    if (!habit) return;
+
+    const isCompleted = habit.completedDates.includes(date);
+    const completedDates = isCompleted
+      ? habit.completedDates.filter(d => d !== date)
+      : [...habit.completedDates, date];
+    const streak = calculateStreak(completedDates);
+
+    // Update local state
+    dispatch({ type: 'TOGGLE_HABIT', payload: { habitId, date } });
+
+    // Sync to Supabase
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('habits').update({
+        completed_dates: completedDates,
+        streak: streak,
+      }).eq('id', habitId).eq('user_id', user.id);
+      if (error) console.error('Error toggling habit:', error);
+    }
+  };
+
+  const updateGoal = async (goal: Goal) => {
+    dispatch({ type: 'UPDATE_GOAL', payload: goal });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('goals').update({
+        title: goal.title,
+        description: goal.description,
+        target_date: goal.targetDate,
+        progress: goal.progress,
+        achieved: goal.achieved,
+      }).eq('id', goal.id).eq('user_id', user.id);
+      if (error) console.error('Error updating goal:', error);
+    }
+  };
+
+  // ============ DELETE FUNCTIONS ============
+
+  const deleteTask = async (id: string) => {
+    dispatch({ type: 'DELETE_TASK', payload: id });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('tasks').delete().eq('id', id).eq('user_id', user.id);
+      if (error) console.error('Error deleting task:', error);
+    }
+  };
+
+  const deleteEvent = async (id: string) => {
+    dispatch({ type: 'DELETE_EVENT', payload: id });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('events').delete().eq('id', id).eq('user_id', user.id);
+      if (error) console.error('Error deleting event:', error);
+    }
+  };
+
+  const deleteProject = async (id: string) => {
+    dispatch({ type: 'DELETE_PROJECT', payload: id });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('projects').delete().eq('id', id).eq('user_id', user.id);
+      if (error) console.error('Error deleting project:', error);
+    }
+  };
+
+  const deleteHabit = async (id: string) => {
+    dispatch({ type: 'DELETE_HABIT', payload: id });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('habits').delete().eq('id', id).eq('user_id', user.id);
+      if (error) console.error('Error deleting habit:', error);
+    }
+  };
+
+  const deleteGoal = async (id: string) => {
+    dispatch({ type: 'DELETE_GOAL', payload: id });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('goals').delete().eq('id', id).eq('user_id', user.id);
+      if (error) console.error('Error deleting goal:', error);
+    }
+  };
+
+  // Note operations
+  const addNote = async (note: Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newNote: NoteItem = {
+      ...note,
+      id: uuidv4(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    dispatch({ type: 'ADD_NOTE', payload: newNote });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('notes').insert({
+        id: newNote.id,
+        user_id: user.id,
+        title: newNote.title,
+        content: newNote.content,
+        color: newNote.color,
+        created_at: newNote.createdAt,
+        updated_at: newNote.updatedAt,
+      });
+      if (error) console.error('Error adding note:', error);
+    }
+  };
+
+  const updateNote = async (note: NoteItem) => {
+    const updatedNote = { ...note, updatedAt: new Date().toISOString() };
+    dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('notes').update({
+        title: updatedNote.title,
+        content: updatedNote.content,
+        color: updatedNote.color,
+        updated_at: updatedNote.updatedAt,
+      }).eq('id', note.id).eq('user_id', user.id);
+      if (error) console.error('Error updating note:', error);
+    }
+  };
+
+  const deleteNote = async (id: string) => {
+    dispatch({ type: 'DELETE_NOTE', payload: id });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('notes').delete().eq('id', id).eq('user_id', user.id);
+      if (error) console.error('Error deleting note:', error);
+    }
+  };
+
   const applyTemplate = (templateId: string) => {
     const template = state.templates.find(t => t.id === templateId);
     if (!template) return;
@@ -551,7 +823,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AppContext.Provider value={{ state, dispatch, addTask, addEvent, addProject, addHabit, addGoal, applyTemplate }}>
+    <AppContext.Provider value={{
+      state,
+      dispatch,
+      // Task operations
+      addTask,
+      updateTask,
+      deleteTask,
+      // Event operations
+      addEvent,
+      updateEvent,
+      deleteEvent,
+      // Project operations
+      addProject,
+      updateProject,
+      deleteProject,
+      // Habit operations
+      addHabit,
+      updateHabit,
+      toggleHabit,
+      deleteHabit,
+      // Goal operations
+      addGoal,
+      updateGoal,
+      deleteGoal,
+      // Note operations
+      addNote,
+      updateNote,
+      deleteNote,
+      // Template operations
+      applyTemplate,
+    }}>
       {children}
     </AppContext.Provider>
   );

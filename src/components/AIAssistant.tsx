@@ -24,8 +24,8 @@ const suggestions = [
 ];
 
 export default function AIAssistant() {
-  const { state, addTask, addHabit, addGoal, applyTemplate } = useApp();
-  const { tasks, habits, goals, events } = state;
+  const { state, addTask, addHabit, addGoal, addProject, applyTemplate } = useApp();
+  const { tasks, habits, goals, events, projects } = state;
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -69,6 +69,8 @@ export default function AIAssistant() {
         status: t.status,
         priority: t.priority,
         dueDate: t.dueDate,
+        startDate: t.startDate,
+        endDate: t.endDate,
       })),
       habits: habits.map(h => ({
         name: h.name,
@@ -84,6 +86,12 @@ export default function AIAssistant() {
         title: e.title,
         startDate: e.startDate,
         endDate: e.endDate,
+      })),
+      projects: projects.map(p => ({
+        name: p.name,
+        startDate: p.startDate,
+        endDate: p.endDate,
+        progress: p.progress,
       })),
       completedToday,
       pendingTasks: pendingTasks.length,
@@ -220,10 +228,11 @@ export default function AIAssistant() {
         // Automatically create items if AI included them
         let createdItem = '';
         
-        // Handle multiple tasks
+        // Handle multiple tasks (including scheduled tasks with date ranges)
         if (parsed.tasks && parsed.tasks.length > 0) {
           try {
             const createdTasks: string[] = [];
+            const scheduledTasks: string[] = [];
             for (const taskData of parsed.tasks) {
               await addTask({
                 title: taskData.title,
@@ -232,24 +241,59 @@ export default function AIAssistant() {
                 priority: (taskData.priority as 'urgent' | 'high' | 'medium' | 'low') || 'medium',
                 tags: [],
                 dueDate: taskData.dueDate || null,
-                startDate: null,
-                endDate: null,
+                startDate: taskData.startDate || null,
+                endDate: taskData.endDate || null,
                 projectId: null,
                 completedAt: null,
                 assignee: null,
                 color: '#6366f1',
               });
               createdTasks.push(taskData.title);
+              if (taskData.startDate && taskData.endDate) {
+                scheduledTasks.push(taskData.title);
+              }
             }
             if (createdTasks.length === 1) {
-              createdItem = `\n\n✅ **Task created:** "${createdTasks[0]}"`;
+              const isScheduled = scheduledTasks.length > 0;
+              createdItem = `\n\n✅ **Task created:** "${createdTasks[0]}"${isScheduled ? ' (visible on Gantt chart)' : ''}`;
             } else {
               createdItem = `\n\n✅ **${createdTasks.length} tasks created:**\n${createdTasks.map(t => `• ${t}`).join('\n')}`;
+              if (scheduledTasks.length > 0) {
+                createdItem += `\n\n📊 ${scheduledTasks.length} task(s) scheduled on Gantt chart`;
+              }
             }
             console.log('Tasks created successfully:', createdTasks.length);
           } catch (e) {
             console.error('Failed to create tasks:', e);
             createdItem = `\n\n⚠️ Failed to create tasks. Please try again.`;
+          }
+        }
+        
+        // Handle multiple project creation
+        if (parsed.projects && parsed.projects.length > 0) {
+          try {
+            const createdProjects: string[] = [];
+            for (const projectData of parsed.projects) {
+              await addProject({
+                name: projectData.name,
+                description: projectData.description || '',
+                color: projectData.color || '#6366f1',
+                tasks: [],
+                startDate: projectData.startDate,
+                endDate: projectData.endDate,
+              });
+              createdProjects.push(projectData.name);
+            }
+            if (createdProjects.length === 1) {
+              const proj = parsed.projects[0];
+              createdItem += `\n\n✅ **Project created:** "${proj.name}" (${proj.startDate} to ${proj.endDate})\n📊 View it on your Gantt chart!`;
+            } else {
+              createdItem += `\n\n✅ **${createdProjects.length} projects created:**\n${createdProjects.map(p => `• ${p}`).join('\n')}\n📊 View them on your Gantt chart!`;
+            }
+            console.log('Projects created successfully:', createdProjects.length);
+          } catch (e) {
+            console.error('Failed to create projects:', e);
+            createdItem += `\n\n⚠️ Failed to create projects. Please try again.`;
           }
         }
         

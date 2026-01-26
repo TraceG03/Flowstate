@@ -150,3 +150,13 @@ export interface WeeklyReview {
   rating: number;
   notes: string;
 }
+
+// Standalone notes (not task notes)
+export interface NoteItem {
+  id: string;
+  title: string;
+  content: string;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+}

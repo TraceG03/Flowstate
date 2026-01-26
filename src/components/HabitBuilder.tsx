@@ -3,10 +3,10 @@ import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
 import { Plus, Flame, CheckCircle, TrendingUp, Calendar } from 'lucide-react';
-import { format, subDays } from 'date-fns';
+import { format, subDays, parseISO } from 'date-fns';
 
 export default function HabitBuilder() {
-  const { state, dispatch, addHabit } = useApp();
+  const { state, addHabit, toggleHabit } = useApp();
   const { habits } = state;
 
   const [showModal, setShowModal] = useState(false);
@@ -50,10 +50,7 @@ export default function HabitBuilder() {
   };
 
   const toggleHabitDay = (habitId: string, date: string) => {
-    dispatch({
-      type: 'TOGGLE_HABIT',
-      payload: { habitId, date },
-    });
+    toggleHabit(habitId, date);
   };
 
   const colors = [
@@ -194,9 +191,9 @@ export default function HabitBuilder() {
                             borderColor: isToday ? habit.color : undefined,
                             borderWidth: isToday ? 2 : 1,
                           }}
-                          title={format(new Date(date), 'MMM d, yyyy')}
+                          title={format(parseISO(date), 'MMM d, yyyy')}
                         >
-                          {format(new Date(date), 'd')}
+                          {format(parseISO(date), 'd')}
                         </div>
                       );
                     })}

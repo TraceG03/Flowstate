@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 
 export default function Dashboard() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, updateTask } = useApp();
   const { tasks, habits, goals, events } = state;
 
   const today = new Date();
@@ -158,13 +158,10 @@ export default function Dashboard() {
                   <div key={task.id} className="task-item">
                     <div
                       className={`task-checkbox ${task.status === 'done' ? 'checked' : ''}`}
-                      onClick={() => dispatch({
-                        type: 'UPDATE_TASK',
-                        payload: {
-                          ...task,
-                          status: task.status === 'done' ? 'todo' : 'done',
-                          completedAt: task.status === 'done' ? null : new Date().toISOString(),
-                        }
+                      onClick={() => updateTask({
+                        ...task,
+                        status: task.status === 'done' ? 'todo' : 'done',
+                        completedAt: task.status === 'done' ? null : new Date().toISOString(),
                       })}
                     >
                       {task.status === 'done' && <CheckCircle size={14} />}
@@ -200,13 +197,10 @@ export default function Dashboard() {
                   <div key={task.id} className="task-item">
                     <div
                       className="task-checkbox"
-                      onClick={() => dispatch({
-                        type: 'UPDATE_TASK',
-                        payload: {
-                          ...task,
-                          status: 'done',
-                          completedAt: new Date().toISOString(),
-                        }
+                      onClick={() => updateTask({
+                        ...task,
+                        status: 'done',
+                        completedAt: new Date().toISOString(),
                       })}
                     />
                     <div className="task-content">

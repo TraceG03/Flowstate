@@ -1,56 +1,36 @@
 import { useState } from 'react';
+import { useApp } from '../context/AppContext';
 import Header from './Header';
 import { Plus, FileText, Search, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
-import { v4 as uuidv4 } from 'uuid';
-
-interface NoteItem {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: string;
-  updatedAt: string;
-  color: string;
-}
+import { format, parseISO } from 'date-fns';
 
 export default function Notes() {
-  const [notes, setNotes] = useState<NoteItem[]>(() => {
-    const saved = localStorage.getItem('productivityNotes');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const { state, addNote, updateNote, deleteNote } = useApp();
+  const { notes } = state;
+
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const saveNotes = (newNotes: NoteItem[]) => {
-    setNotes(newNotes);
-    localStorage.setItem('productivityNotes', JSON.stringify(newNotes));
-  };
-
   const createNote = () => {
-    const newNote: NoteItem = {
-      id: uuidv4(),
+    addNote({
       title: 'Untitled Note',
       content: '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
       color: '#6366f1',
-    };
-    saveNotes([newNote, ...notes]);
-    setSelectedNote(newNote.id);
+    });
   };
 
-  const updateNote = (id: string, updates: Partial<NoteItem>) => {
-    saveNotes(
-      notes.map(note =>
-        note.id === id
-          ? { ...note, ...updates, updatedAt: new Date().toISOString() }
-          : note
-      )
-    );
+  const handleUpdateNote = (id: string, updates: { title?: string; content?: string; color?: string }) => {
+    const note = notes.find(n => n.id === id);
+    if (note) {
+      updateNote({
+        ...note,
+        ...updates,
+      });
+    }
   };
 
-  const deleteNote = (id: string) => {
-    saveNotes(notes.filter(note => note.id !== id));
+  const handleDeleteNote = (id: string) => {
+    deleteNote(id);
     if (selectedNote === id) {
       setSelectedNote(null);
     }
@@ -122,7 +102,7 @@ export default function Notes() {
                       {note.content || 'No content'}
                     </p>
                     <p className="text-sm text-muted mt-1">
-                      {format(new Date(note.updatedAt), 'MMM d, h:mm a')}
+                      {format(parseISO(note.updatedAt), 'MMM d, h:mm a')}
                     </p>
                   </div>
                 ))
@@ -141,14 +121,14 @@ export default function Notes() {
                       className="input"
                       style={{ fontSize: '1.2rem', fontWeight: 600 }}
                       value={currentNote.title}
-                      onChange={(e) => updateNote(currentNote.id, { title: e.target.value })}
+                      onChange={(e) => handleUpdateNote(currentNote.id, { title: e.target.value })}
                       placeholder="Note title..."
                     />
                     <div className="flex gap-1">
                       {colors.map(color => (
                         <button
                           key={color}
-                          onClick={() => updateNote(currentNote.id, { color })}
+                          onClick={() => handleUpdateNote(currentNote.id, { color })}
                           style={{
                             width: 20,
                             height: 20,
@@ -163,7 +143,7 @@ export default function Notes() {
                   </div>
                   <button
                     className="btn btn-secondary btn-icon"
-                    onClick={() => deleteNote(currentNote.id)}
+                    onClick={() => handleDeleteNote(currentNote.id)}
                   >
                     <Trash2 size={16} />
                   </button>
@@ -171,7 +151,7 @@ export default function Notes() {
                 <div className="notes-editor-content">
                   <textarea
                     value={currentNote.content}
-                    onChange={(e) => updateNote(currentNote.id, { content: e.target.value })}
+                    onChange={(e) => handleUpdateNote(currentNote.id, { content: e.target.value })}
                     placeholder="Start writing your note..."
                   />
                 </div>

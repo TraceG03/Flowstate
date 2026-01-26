@@ -17,6 +17,8 @@ export interface ProductivityContext {
     status: string;
     priority: string;
     dueDate?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
   }>;
   habits: Array<{
     name: string;
@@ -33,6 +35,12 @@ export interface ProductivityContext {
     startDate: string;
     endDate: string;
   }>;
+  projects?: Array<{
+    name: string;
+    startDate: string;
+    endDate: string;
+    progress: number;
+  }>;
   completedToday: number;
   pendingTasks: number;
   urgentTasks: number;
@@ -43,10 +51,10 @@ const SYSTEM_PROMPT = `You are Flowstate AI, a friendly and helpful productivity
 - Plan their day and optimize their schedule
 - Set and achieve goals
 - Build healthy habits
-- Manage tasks effectively
+- Manage tasks and projects effectively
 - Stay motivated and productive
 
-You have access to the user's current productivity data including their tasks, habits, goals, and calendar events. Use this context to provide personalized, actionable advice.
+You have access to the user's current productivity data including their tasks, habits, goals, projects, and calendar events. Use this context to provide personalized, actionable advice.
 
 Guidelines:
 - Be concise but helpful (keep responses under 300 words)
@@ -55,8 +63,8 @@ Guidelines:
 - Be encouraging and positive
 - Format responses with markdown for readability (bold, bullet points, etc.)
 
-IMPORTANT - Creating Tasks, Habits, and Goals:
-When the user asks you to CREATE, ADD, or MAKE tasks, habits, or goals, you MUST include the appropriate JSON block(s) in your response. Do NOT ask for confirmation - just create them immediately.
+IMPORTANT - Creating Tasks, Habits, Goals, and Projects:
+When the user asks you to CREATE, ADD, MAKE, or SCHEDULE items, you MUST include the appropriate JSON block(s) in your response. Do NOT ask for confirmation - just create them immediately.
 
 For MULTIPLE TASKS (when user provides a list), include a separate json:task block for EACH task:
 \`\`\`json:task
@@ -65,9 +73,6 @@ For MULTIPLE TASKS (when user provides a list), include a separate json:task blo
 \`\`\`json:task
 {"title": "Second task title here", "priority": "medium", "dueDate": null}
 \`\`\`
-\`\`\`json:task
-{"title": "Third task title here", "priority": "high", "dueDate": null}
-\`\`\`
 
 For a SINGLE TASK:
 \`\`\`json:task
@@ -75,6 +80,29 @@ For a SINGLE TASK:
 \`\`\`
 Priority must be one of: "low", "medium", "high", "urgent"
 dueDate should be "YYYY-MM-DD" format or null
+
+For SCHEDULED TASKS (tasks with a date range for Gantt chart):
+When user mentions scheduling a task between dates, starting/ending dates, or wants to see it on the Gantt chart:
+\`\`\`json:task
+{"title": "Task title", "priority": "medium", "startDate": "2025-01-20", "endDate": "2025-01-25", "dueDate": null}
+\`\`\`
+Both startDate and endDate should be "YYYY-MM-DD" format. These tasks will appear on the Gantt chart.
+
+For PROJECTS (larger initiatives with date ranges for Gantt chart):
+\`\`\`json:project
+{"name": "Project name", "description": "Project description", "startDate": "2025-01-20", "endDate": "2025-02-15", "color": "#6366f1"}
+\`\`\`
+- startDate and endDate should be "YYYY-MM-DD" format
+- color is optional (default: "#6366f1"). Options: "#6366f1", "#8b5cf6", "#ec4899", "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#3b82f6"
+- Projects appear on the Gantt chart timeline
+
+For MULTIPLE PROJECTS, include a separate json:project block for EACH project:
+\`\`\`json:project
+{"name": "First Project", "description": "Description", "startDate": "2025-01-20", "endDate": "2025-02-15", "color": "#6366f1"}
+\`\`\`
+\`\`\`json:project
+{"name": "Second Project", "description": "Description", "startDate": "2025-02-01", "endDate": "2025-03-01", "color": "#22c55e"}
+\`\`\`
 
 For HABITS, include this exact format:
 \`\`\`json:habit
@@ -88,7 +116,7 @@ For GOALS, include this exact format:
 \`\`\`
 targetDate should be "YYYY-MM-DD" format or null
 
-Always include a brief confirmation message along with the JSON block, like "Done! I've created that task for you."
+Always include a brief confirmation message along with the JSON block, like "Done! I've created that for you."
 
 Examples of user requests that should trigger creation:
 - "Create a task to buy groceries" → include ONE json:task block
@@ -97,7 +125,11 @@ Examples of user requests that should trigger creation:
 - "I need to call mom tomorrow" → include json:task block (infer the intent)
 - "Remind me to exercise" → include json:task block
 - "Create these tasks: -Task 1 -Task 2 -Task 3" → include MULTIPLE json:task blocks (one per task)
-- When user provides a bulleted or numbered list of tasks, create ALL of them with separate json:task blocks`;
+- "Create a project called Website Redesign from Jan 20 to Feb 15" → include json:project block
+- "Schedule task 'Write docs' from January 20 to 25" → include json:task with startDate and endDate
+- "Add a project for Q1 planning starting next week for 2 weeks" → include json:project block (calculate dates)
+- "Create these projects: Marketing Campaign (Feb-Mar), Product Launch (Mar-Apr)" → include MULTIPLE json:project blocks
+- When user provides a bulleted or numbered list of tasks or projects, create ALL of them with separate JSON blocks`;
 
 export function buildContextMessage(context: ProductivityContext): string {
   const today = new Date().toLocaleDateString('en-US', { 
@@ -110,6 +142,11 @@ export function buildContextMessage(context: ProductivityContext): string {
   const urgentTasks = context.tasks
     .filter(t => t.priority === 'urgent' && t.status !== 'done')
     .map(t => t.title)
+    .slice(0, 5);
+
+  const scheduledTasks = context.tasks
+    .filter(t => t.startDate && t.endDate)
+    .map(t => `${t.title} (${t.startDate} - ${t.endDate})`)
     .slice(0, 5);
 
   const todayEvents = context.events
@@ -129,6 +166,10 @@ export function buildContextMessage(context: ProductivityContext): string {
     .map(g => `${g.title} (${g.progress}% complete)`)
     .slice(0, 5);
 
+  const activeProjects = (context.projects || [])
+    .map(p => `${p.name} (${p.startDate} - ${p.endDate}, ${p.progress}% complete)`)
+    .slice(0, 5);
+
   return `
 **Current Date:** ${today}
 
@@ -138,6 +179,10 @@ export function buildContextMessage(context: ProductivityContext): string {
 - Urgent tasks: ${context.urgentTasks}
 
 **Urgent Tasks:** ${urgentTasks.length > 0 ? urgentTasks.join(', ') : 'None'}
+
+**Scheduled Tasks (Gantt):** ${scheduledTasks.length > 0 ? scheduledTasks.join(', ') : 'None'}
+
+**Active Projects:** ${activeProjects.length > 0 ? activeProjects.join(', ') : 'No active projects'}
 
 **Today's Events:** ${todayEvents.length > 0 ? todayEvents.join(', ') : 'No events scheduled'}
 
@@ -205,11 +250,19 @@ export async function chat(
 // Parse AI response for actionable items
 export function parseAIResponse(response: string): {
   text: string;
-  tasks?: Array<{ title: string; priority: string; dueDate: string | null }>;
+  tasks?: Array<{ 
+    title: string; 
+    priority: string; 
+    dueDate: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+  }>;
   habit?: { name: string; frequency: string; description: string };
   goal?: { title: string; description: string; targetDate: string | null };
+  projects?: Array<{ name: string; description: string; startDate: string; endDate: string; color: string }>;
 } {
   const result: ReturnType<typeof parseAIResponse> = { text: response };
+  let cleanedText = response;
 
   // Find ALL task blocks (supports multiple tasks at once)
   // Matches: ```json:task, ```task, ``` json:task, etc.
@@ -218,7 +271,6 @@ export function parseAIResponse(response: string): {
   
   if (taskMatches.length > 0) {
     result.tasks = [];
-    let cleanedText = response;
     
     for (const match of taskMatches) {
       try {
@@ -227,6 +279,8 @@ export function parseAIResponse(response: string): {
           title: parsed.title || 'Untitled Task',
           priority: parsed.priority || 'medium',
           dueDate: parsed.dueDate || parsed.due_date || null,
+          startDate: parsed.startDate || parsed.start_date || null,
+          endDate: parsed.endDate || parsed.end_date || null,
         });
         cleanedText = cleanedText.replace(match[0], '').trim();
       } catch (e) {
@@ -234,8 +288,33 @@ export function parseAIResponse(response: string): {
       }
     }
     
-    result.text = cleanedText;
     console.log('Parsed tasks:', result.tasks);
+  }
+
+  // Find ALL project blocks (supports multiple projects at once)
+  const projectRegex = /```\s*(?:json)?:?\s*project\s*\n?(\{[\s\S]*?\})\s*```/gi;
+  const projectMatches = [...response.matchAll(projectRegex)];
+  
+  if (projectMatches.length > 0) {
+    result.projects = [];
+    
+    for (const match of projectMatches) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        result.projects.push({
+          name: parsed.name || 'Untitled Project',
+          description: parsed.description || '',
+          startDate: parsed.startDate || parsed.start_date || new Date().toISOString().split('T')[0],
+          endDate: parsed.endDate || parsed.end_date || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          color: parsed.color || '#6366f1',
+        });
+        cleanedText = cleanedText.replace(match[0], '').trim();
+      } catch (e) {
+        console.error('Failed to parse project JSON:', e, 'Raw:', match[1]);
+      }
+    }
+    
+    console.log('Parsed projects:', result.projects);
   }
 
   // Check for habit creation
@@ -248,7 +327,7 @@ export function parseAIResponse(response: string): {
         frequency: parsed.frequency || 'daily',
         description: parsed.description || '',
       };
-      result.text = response.replace(habitMatch[0], '').trim();
+      cleanedText = cleanedText.replace(habitMatch[0], '').trim();
       console.log('Parsed habit:', result.habit);
     } catch (e) {
       console.error('Failed to parse habit JSON:', e, 'Raw:', habitMatch[1]);
@@ -265,12 +344,13 @@ export function parseAIResponse(response: string): {
         description: parsed.description || '',
         targetDate: parsed.targetDate || parsed.target_date || null,
       };
-      result.text = response.replace(goalMatch[0], '').trim();
+      cleanedText = cleanedText.replace(goalMatch[0], '').trim();
       console.log('Parsed goal:', result.goal);
     } catch (e) {
       console.error('Failed to parse goal JSON:', e, 'Raw:', goalMatch[1]);
     }
   }
 
+  result.text = cleanedText;
   return result;
 }

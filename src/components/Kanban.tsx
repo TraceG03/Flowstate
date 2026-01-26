@@ -14,7 +14,7 @@ const columns: { id: TaskStatus; title: string; color: string }[] = [
 ];
 
 export default function Kanban() {
-  const { state, dispatch, addTask } = useApp();
+  const { state, addTask, updateTask } = useApp();
   const { tasks, tags } = state;
 
   const [showModal, setShowModal] = useState(false);
@@ -52,13 +52,10 @@ export default function Kanban() {
     const task = tasks.find(t => t.id === draggedTask);
     if (!task) return;
 
-    dispatch({
-      type: 'UPDATE_TASK',
-      payload: {
-        ...task,
-        status: columnId,
-        completedAt: columnId === 'done' ? new Date().toISOString() : null,
-      },
+    updateTask({
+      ...task,
+      status: columnId,
+      completedAt: columnId === 'done' ? new Date().toISOString() : null,
     });
 
     setDraggedTask(null);

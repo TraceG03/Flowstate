@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function Goals() {
-  const { state, dispatch, addGoal } = useApp();
+  const { state, addGoal, updateGoal, deleteGoal } = useApp();
   const { goals } = state;
 
   const [showModal, setShowModal] = useState(false);
@@ -64,19 +64,16 @@ export default function Goals() {
     const completedCount = updatedMilestones.filter(m => m.completed).length;
     const progress = Math.round((completedCount / updatedMilestones.length) * 100);
 
-    dispatch({
-      type: 'UPDATE_GOAL',
-      payload: {
-        ...goal,
-        milestones: updatedMilestones,
-        progress,
-        achieved: progress === 100,
-      },
+    updateGoal({
+      ...goal,
+      milestones: updatedMilestones,
+      progress,
+      achieved: progress === 100,
     });
   };
 
-  const deleteGoal = (id: string) => {
-    dispatch({ type: 'DELETE_GOAL', payload: id });
+  const handleDeleteGoal = (id: string) => {
+    deleteGoal(id);
   };
 
   const activeGoals = goals.filter(g => !g.achieved);
@@ -113,7 +110,7 @@ export default function Goals() {
                     <h4 className="font-semibold">{goal.title}</h4>
                     <button
                       className="btn btn-secondary btn-icon"
-                      onClick={() => deleteGoal(goal.id)}
+                      onClick={() => handleDeleteGoal(goal.id)}
                     >
                       <Trash2 size={16} />
                     </button>

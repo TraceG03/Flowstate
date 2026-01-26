@@ -10,7 +10,7 @@ import { format, parseISO } from 'date-fns';
 import type { Priority, TaskStatus } from '../types';
 
 export default function Tasks() {
-  const { state, dispatch, addTask } = useApp();
+  const { state, addTask, updateTask, deleteTask } = useApp();
   const { tasks, tags } = state;
 
   const [showModal, setShowModal] = useState(false);
@@ -70,18 +70,15 @@ export default function Tasks() {
   };
 
   const toggleTaskStatus = (task: typeof tasks[0]) => {
-    dispatch({
-      type: 'UPDATE_TASK',
-      payload: {
-        ...task,
-        status: task.status === 'done' ? 'todo' : 'done',
-        completedAt: task.status === 'done' ? null : new Date().toISOString(),
-      },
+    updateTask({
+      ...task,
+      status: task.status === 'done' ? 'todo' : 'done',
+      completedAt: task.status === 'done' ? null : new Date().toISOString(),
     });
   };
 
-  const deleteTask = (id: string) => {
-    dispatch({ type: 'DELETE_TASK', payload: id });
+  const handleDeleteTask = (id: string) => {
+    deleteTask(id);
   };
 
   const colors = [
@@ -221,7 +218,7 @@ export default function Tasks() {
                   <div className="task-actions">
                     <button
                       className="btn btn-secondary btn-icon"
-                      onClick={() => deleteTask(task.id)}
+                      onClick={() => handleDeleteTask(task.id)}
                     >
                       <Trash2 size={16} />
                     </button>

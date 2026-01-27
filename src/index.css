@@ -1291,6 +1291,10 @@ select.input {
   z-index: 2;
 }
 
+.time-block:hover .resize-indicator {
+  opacity: 1 !important;
+}
+
 /* Notes */
 .notes-container {
   display: flex;

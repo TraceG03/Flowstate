@@ -11,7 +11,7 @@ const navItems = [
   { id: 'tasks', icon: CheckSquare, label: 'Tasks' },
   { id: 'kanban', icon: FolderKanban, label: 'Kanban Board' },
   { id: 'gantt', icon: GanttChart, label: 'Gantt Chart' },
-  { id: 'timeblock', icon: Clock, label: 'Time Blocking' },
+  { id: 'timeblock', icon: Clock, label: 'Daily Planner' },
 ];
 
 const planningItems = [

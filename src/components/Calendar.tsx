@@ -5,7 +5,7 @@ import Modal from './Modal';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  eachDayOfInterval, isSameMonth, isToday, isSameDay, parseISO, addMonths, subMonths, differenceInDays
+  eachDayOfInterval, isSameMonth, isToday, isSameDay, parseISO, addMonths, subMonths, differenceInDays, addDays
 } from 'date-fns';
 
 export default function CalendarView() {
@@ -73,7 +73,7 @@ export default function CalendarView() {
     e.dataTransfer.setData('text/plain', ''); // Required for Firefox
   };
 
-  const handleDragOver = (e: React.DragEvent, day: Date) => {
+  const handleDragOver = (e: React.DragEvent, _day: Date) => {
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
@@ -84,8 +84,6 @@ export default function CalendarView() {
     e.stopPropagation();
     
     if (!draggedItem || !dragStartDateRef.current) return;
-
-    const dayDiff = differenceInDays(targetDay, dragStartDateRef.current);
 
     if (draggedItem.type === 'event') {
       const event = events.find(e => e.id === draggedItem.id);

@@ -27,8 +27,6 @@ export default function Goals() {
     e.preventDefault();
     if (!newGoal.title) return;
 
-    const goalId = uuidv4();
-
     addGoal({
       title: newGoal.title,
       description: newGoal.description,

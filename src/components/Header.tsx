@@ -32,7 +32,7 @@ interface HeaderProps {
 }
 
 export default function Header({ title, onAddClick }: HeaderProps) {
-  const { state, dispatch } = useApp();
+  const { dispatch } = useApp();
   const [isRecording, setIsRecording] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [recognition, setRecognition] = useState<SpeechRecognitionInstance | null>(null);

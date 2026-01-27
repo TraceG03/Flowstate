@@ -23,7 +23,6 @@ export default function GanttChart() {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<{ name?: string; description?: string; startDate?: string; endDate?: string; color?: string; title?: string }>({});
   const [draggedItem, setDraggedItem] = useState<{ type: 'project' | 'task'; id: string; originalStart: string; originalEnd: string } | null>(null);
-  const [dragStartX, setDragStartX] = useState(0);
   const [dragStartDate, setDragStartDate] = useState<Date | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -285,7 +284,6 @@ export default function GanttChart() {
     e.preventDefault();
     const startDateObj = parseISO(startDate);
     setDraggedItem({ type, id, originalStart: startDate, originalEnd: endDate });
-    setDragStartX(e.clientX);
     setDragStartDate(startDateObj);
   };
 
@@ -335,7 +333,6 @@ export default function GanttChart() {
 
     const handleMouseUp = () => {
       setDraggedItem(null);
-      setDragStartX(0);
       setDragStartDate(null);
     };
 
@@ -462,7 +459,7 @@ export default function GanttChart() {
                         userSelect: 'none',
                       }}
                       onMouseDown={(e) => handleBarMouseDown(e, 'project', project.id, project.startDate, project.endDate)}
-                      onClick={(e) => {
+                      onClick={() => {
                         if (!draggedItem) {
                           handleProjectClick(project);
                         }
@@ -513,7 +510,7 @@ export default function GanttChart() {
                         userSelect: 'none',
                       }}
                       onMouseDown={(e) => handleBarMouseDown(e, 'task', task.id, task.startDate!, task.endDate!)}
-                      onClick={(e) => {
+                      onClick={() => {
                         if (!draggedItem) {
                           handleTaskClick(task);
                         }

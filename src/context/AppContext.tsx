@@ -335,6 +335,8 @@ interface AppContextType {
   addNote: (note: Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateNote: (note: NoteItem) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
+  // Reminder operations
+  addReminder: (reminder: Omit<Reminder, 'id' | 'dismissed'>) => void;
   // Template operations
   applyTemplate: (templateId: string) => void;
 }
@@ -792,6 +794,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Reminder operations
+  const addReminder = (reminder: Omit<Reminder, 'id' | 'dismissed'>) => {
+    const newReminder: Reminder = {
+      ...reminder,
+      id: uuidv4(),
+      dismissed: false,
+    };
+    dispatch({ type: 'ADD_REMINDER', payload: newReminder });
+  };
+
   const applyTemplate = (templateId: string) => {
     const template = state.templates.find(t => t.id === templateId);
     if (!template) return;
@@ -851,6 +863,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addNote,
       updateNote,
       deleteNote,
+      // Reminder operations
+      addReminder,
       // Template operations
       applyTemplate,
     }}>

@@ -4,13 +4,13 @@ import Header from './Header';
 import Modal from './Modal';
 import {
   CheckCircle, Calendar,
-  Plus, Filter, List, Grid, Trash2, Edit2, Clock, Tag
+  Plus, Filter, List, Grid, Trash2, Edit2, Clock, Tag, Bell
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import type { Priority, TaskStatus, Task } from '../types';
 
 export default function Tasks() {
-  const { state, addTask, updateTask, deleteTask } = useApp();
+  const { state, addTask, updateTask, deleteTask, addReminder } = useApp();
   const { tasks, tags } = state;
 
   const [showModal, setShowModal] = useState(false);
@@ -31,6 +31,8 @@ export default function Tasks() {
     tags: [] as string[],
     dueDate: '',
     color: '#6366f1',
+    reminderDate: '',
+    reminderTime: '',
   });
 
   const filteredTasks = tasks.filter(task => {
@@ -43,6 +45,8 @@ export default function Tasks() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.title) return;
+
+    const taskId = crypto.randomUUID();
 
     addTask({
       title: newTask.title,
@@ -59,6 +63,18 @@ export default function Tasks() {
       color: newTask.color,
     });
 
+    // Create reminder if set
+    if (newTask.reminderDate && newTask.reminderTime) {
+      const reminderDateTime = `${newTask.reminderDate}T${newTask.reminderTime}:00`;
+      addReminder({
+        title: 'Task Reminder',
+        message: newTask.title,
+        dateTime: reminderDateTime,
+        taskId: taskId,
+        eventId: null,
+      });
+    }
+
     setNewTask({
       title: '',
       description: '',
@@ -67,6 +83,8 @@ export default function Tasks() {
       tags: [],
       dueDate: '',
       color: '#6366f1',
+      reminderDate: '',
+      reminderTime: '',
     });
     setShowModal(false);
   };
@@ -99,6 +117,8 @@ export default function Tasks() {
       tags: selectedTask.tags,
       dueDate: selectedTask.dueDate || '',
       color: selectedTask.color,
+      reminderDate: '',
+      reminderTime: '',
     });
     setIsEditing(true);
   };
@@ -121,6 +141,18 @@ export default function Tasks() {
         : newTask.status !== 'done' ? null : selectedTask.completedAt,
     });
 
+    // Create reminder if set
+    if (newTask.reminderDate && newTask.reminderTime) {
+      const reminderDateTime = `${newTask.reminderDate}T${newTask.reminderTime}:00`;
+      addReminder({
+        title: 'Task Reminder',
+        message: newTask.title,
+        dateTime: reminderDateTime,
+        taskId: selectedTask.id,
+        eventId: null,
+      });
+    }
+
     closeTaskDetail();
   };
 
@@ -135,6 +167,8 @@ export default function Tasks() {
       tags: [],
       dueDate: '',
       color: '#6366f1',
+      reminderDate: '',
+      reminderTime: '',
     });
   };
 
@@ -380,6 +414,32 @@ export default function Tasks() {
             </div>
 
             <div className="input-group">
+              <label className="input-label flex items-center gap-2">
+                <Bell size={16} />
+                Reminder (optional)
+              </label>
+              <div className="grid grid-2">
+                <input
+                  type="date"
+                  className="input"
+                  value={newTask.reminderDate}
+                  onChange={(e) => setNewTask(prev => ({ ...prev, reminderDate: e.target.value }))}
+                  placeholder="Date"
+                />
+                <input
+                  type="time"
+                  className="input"
+                  value={newTask.reminderTime}
+                  onChange={(e) => setNewTask(prev => ({ ...prev, reminderTime: e.target.value }))}
+                  placeholder="Time"
+                />
+              </div>
+              <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                You'll receive a notification at this time
+              </p>
+            </div>
+
+            <div className="input-group">
               <label className="input-label">Tags</label>
               <div className="flex gap-2 flex-wrap">
                 {tags.map(tag => (
@@ -506,6 +566,29 @@ export default function Tasks() {
                   value={newTask.dueDate}
                   onChange={(e) => setNewTask(prev => ({ ...prev, dueDate: e.target.value }))}
                 />
+              </div>
+
+              <div className="input-group">
+                <label className="input-label flex items-center gap-2">
+                  <Bell size={16} />
+                  Set Reminder
+                </label>
+                <div className="grid grid-2">
+                  <input
+                    type="date"
+                    className="input"
+                    value={newTask.reminderDate}
+                    onChange={(e) => setNewTask(prev => ({ ...prev, reminderDate: e.target.value }))}
+                    placeholder="Date"
+                  />
+                  <input
+                    type="time"
+                    className="input"
+                    value={newTask.reminderTime}
+                    onChange={(e) => setNewTask(prev => ({ ...prev, reminderTime: e.target.value }))}
+                    placeholder="Time"
+                  />
+                </div>
               </div>
 
               <div className="input-group">

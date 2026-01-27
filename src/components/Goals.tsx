@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
-import { Plus, Target, CheckCircle, Circle, Trophy, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Target, CheckCircle, Circle, Trophy, Trash2, Edit2, Bell } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 import type { Goal } from '../types';
 
 export default function Goals() {
-  const { state, addGoal, updateGoal, deleteGoal } = useApp();
+  const { state, addGoal, updateGoal, deleteGoal, addReminder } = useApp();
   const { goals } = state;
 
   const [showModal, setShowModal] = useState(false);
@@ -18,12 +18,16 @@ export default function Goals() {
     description: '',
     targetDate: '',
     milestones: [] as { id: string; title: string; completed: boolean }[],
+    reminderDate: '',
+    reminderTime: '',
   });
   const [newMilestone, setNewMilestone] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGoal.title) return;
+
+    const goalId = uuidv4();
 
     addGoal({
       title: newGoal.title,
@@ -34,6 +38,18 @@ export default function Goals() {
         completedAt: null,
       })),
     });
+
+    // Create reminder if set
+    if (newGoal.reminderDate && newGoal.reminderTime) {
+      const reminderDateTime = `${newGoal.reminderDate}T${newGoal.reminderTime}:00`;
+      addReminder({
+        title: 'Goal Reminder',
+        message: newGoal.title,
+        dateTime: reminderDateTime,
+        taskId: null,
+        eventId: null,
+      });
+    }
 
     resetForm();
   };
@@ -79,6 +95,8 @@ export default function Goals() {
       description: goal.description,
       targetDate: goal.targetDate || '',
       milestones: goal.milestones.map(m => ({ id: m.id, title: m.title, completed: m.completed })),
+      reminderDate: '',
+      reminderTime: '',
     });
     setShowModal(true);
   };
@@ -105,6 +123,18 @@ export default function Goals() {
       achieved: progress === 100,
     });
 
+    // Create reminder if set
+    if (newGoal.reminderDate && newGoal.reminderTime) {
+      const reminderDateTime = `${newGoal.reminderDate}T${newGoal.reminderTime}:00`;
+      addReminder({
+        title: 'Goal Reminder',
+        message: newGoal.title,
+        dateTime: reminderDateTime,
+        taskId: null,
+        eventId: null,
+      });
+    }
+
     resetForm();
   };
 
@@ -114,6 +144,8 @@ export default function Goals() {
       description: '',
       targetDate: '',
       milestones: [],
+      reminderDate: '',
+      reminderTime: '',
     });
     setEditingGoal(null);
     setShowModal(false);
@@ -289,6 +321,32 @@ export default function Goals() {
                 value={newGoal.targetDate}
                 onChange={(e) => setNewGoal(prev => ({ ...prev, targetDate: e.target.value }))}
               />
+            </div>
+
+            <div className="input-group">
+              <label className="input-label flex items-center gap-2">
+                <Bell size={16} />
+                Reminder (optional)
+              </label>
+              <div className="grid grid-2">
+                <input
+                  type="date"
+                  className="input"
+                  value={newGoal.reminderDate}
+                  onChange={(e) => setNewGoal(prev => ({ ...prev, reminderDate: e.target.value }))}
+                  placeholder="Date"
+                />
+                <input
+                  type="time"
+                  className="input"
+                  value={newGoal.reminderTime}
+                  onChange={(e) => setNewGoal(prev => ({ ...prev, reminderTime: e.target.value }))}
+                  placeholder="Time"
+                />
+              </div>
+              <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                You'll receive a notification at this time
+              </p>
             </div>
 
             <div className="input-group">

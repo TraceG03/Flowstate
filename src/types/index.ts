@@ -160,3 +160,13 @@ export interface NoteItem {
   createdAt: string;
   updatedAt: string;
 }
+
+// In-app notifications
+export interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  type: 'task' | 'goal' | 'event' | 'reminder';
+  timestamp: string;
+  dismissed: boolean;
+}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Bell, Mic, MicOff, Plus, Menu } from 'lucide-react';
+import { Search, Mic, MicOff, Plus, Menu } from 'lucide-react';
+import NotificationCenter from './NotificationCenter';
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -74,8 +75,6 @@ export default function Header({ title, onAddClick }: HeaderProps) {
     }
   };
 
-  const unreadReminders = state.reminders.filter((r: { dismissed: boolean }) => !r.dismissed).length;
-
   return (
     <header className="header">
       <div className="header-left">
@@ -107,22 +106,7 @@ export default function Header({ title, onAddClick }: HeaderProps) {
           {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
         </button>
 
-        <button className="header-btn" style={{ position: 'relative' }}>
-          <Bell size={20} />
-          {unreadReminders > 0 && (
-            <span
-              style={{
-                position: 'absolute',
-                top: 6,
-                right: 6,
-                width: 8,
-                height: 8,
-                background: 'var(--color-error)',
-                borderRadius: '50%',
-              }}
-            />
-          )}
-        </button>
+        <NotificationCenter />
 
         {onAddClick && (
           <button className="btn btn-primary" onClick={onAddClick}>

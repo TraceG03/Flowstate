@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  eachDayOfInterval, isSameMonth, isToday, isSameDay, parseISO, addMonths, subMonths
+  eachDayOfInterval, isSameMonth, isToday, isSameDay, parseISO, addMonths, subMonths, differenceInDays
 } from 'date-fns';
 
 export default function CalendarView() {
-  const { state, addEvent } = useApp();
+  const { state, addEvent, updateEvent, updateTask } = useApp();
   const { events, tasks } = state;
+  const [draggedItem, setDraggedItem] = useState<{ type: 'event' | 'task'; id: string } | null>(null);
+  const dragStartDateRef = useRef<Date | null>(null);
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showModal, setShowModal] = useState(false);
@@ -51,6 +53,9 @@ export default function CalendarView() {
   };
 
   const handleDayClick = (day: Date) => {
+    // Don't open modal if we're dragging
+    if (draggedItem) return;
+    
     setSelectedDate(day);
     setNewEvent(prev => ({
       ...prev,
@@ -58,6 +63,55 @@ export default function CalendarView() {
       endDate: format(day, "yyyy-MM-dd'T'10:00"),
     }));
     setShowModal(true);
+  };
+
+  const handleDragStart = (e: React.DragEvent, type: 'event' | 'task', id: string, startDate: string) => {
+    e.stopPropagation();
+    setDraggedItem({ type, id });
+    dragStartDateRef.current = parseISO(startDate);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', ''); // Required for Firefox
+  };
+
+  const handleDragOver = (e: React.DragEvent, day: Date) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetDay: Date) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!draggedItem || !dragStartDateRef.current) return;
+
+    const dayDiff = differenceInDays(targetDay, dragStartDateRef.current);
+
+    if (draggedItem.type === 'event') {
+      const event = events.find(e => e.id === draggedItem.id);
+      if (event) {
+        const newStartDate = parseISO(event.startDate);
+        const newEndDate = parseISO(event.endDate);
+        const duration = differenceInDays(newEndDate, newStartDate);
+        
+        updateEvent({
+          ...event,
+          startDate: format(addDays(targetDay, 0), "yyyy-MM-dd'T'HH:mm"),
+          endDate: format(addDays(targetDay, duration), "yyyy-MM-dd'T'HH:mm"),
+        });
+      }
+    } else if (draggedItem.type === 'task') {
+      const task = tasks.find(t => t.id === draggedItem.id);
+      if (task && task.dueDate) {
+        updateTask({
+          ...task,
+          dueDate: format(targetDay, 'yyyy-MM-dd'),
+        });
+      }
+    }
+
+    setDraggedItem(null);
+    dragStartDateRef.current = null;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -151,6 +205,8 @@ export default function CalendarView() {
                   key={day.toISOString()}
                   className={`calendar-day ${isTodayDate ? 'today' : ''} ${!isCurrentMonth ? 'other-month' : ''}`}
                   onClick={() => handleDayClick(day)}
+                  onDragOver={(e) => handleDragOver(e, day)}
+                  onDrop={(e) => handleDrop(e, day)}
                 >
                   <div className={`calendar-day-number ${isTodayDate ? '' : ''}`}>
                     {isTodayDate ? (
@@ -175,7 +231,14 @@ export default function CalendarView() {
                     <div
                       key={event.id}
                       className="calendar-event"
-                      style={{ background: event.color, color: 'white' }}
+                      style={{ 
+                        background: event.color, 
+                        color: 'white',
+                        cursor: 'grab',
+                        userSelect: 'none',
+                      }}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, 'event', event.id, event.startDate)}
                       onClick={(e) => e.stopPropagation()}
                     >
                       {event.title}
@@ -190,7 +253,11 @@ export default function CalendarView() {
                         background: 'var(--bg-tertiary)',
                         border: `1px solid ${task.color}`,
                         color: 'var(--text-primary)',
+                        cursor: 'grab',
+                        userSelect: 'none',
                       }}
+                      draggable={!!task.dueDate}
+                      onDragStart={(e) => task.dueDate && handleDragStart(e, 'task', task.id, task.dueDate)}
                       onClick={(e) => e.stopPropagation()}
                     >
                       {task.title}

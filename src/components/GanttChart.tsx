@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
@@ -22,6 +22,10 @@ export default function GanttChart() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<{ name?: string; description?: string; startDate?: string; endDate?: string; color?: string; title?: string }>({});
+  const [draggedItem, setDraggedItem] = useState<{ type: 'project' | 'task'; id: string; originalStart: string; originalEnd: string } | null>(null);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragStartDate, setDragStartDate] = useState<Date | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const [newProject, setNewProject] = useState({
     name: '',
@@ -261,6 +265,89 @@ export default function GanttChart() {
     setIsEditing(false);
   };
 
+  // Calculate date from X position in the timeline
+  const getDateFromX = (x: number, currentViewConfig: typeof viewConfig, currentTimeUnits: Date[]): Date | null => {
+    if (!containerRef.current) return null;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const taskNamesWidth = 200; // Approximate width of task names column
+    const relativeX = x - containerRect.left - taskNamesWidth;
+    
+    if (relativeX < 0) return null;
+    
+    const cellIndex = Math.floor(relativeX / currentViewConfig.cellWidth);
+    if (cellIndex < 0 || cellIndex >= currentTimeUnits.length) return null;
+    
+    return currentTimeUnits[cellIndex];
+  };
+
+  const handleBarMouseDown = (e: React.MouseEvent, type: 'project' | 'task', id: string, startDate: string, endDate: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startDateObj = parseISO(startDate);
+    setDraggedItem({ type, id, originalStart: startDate, originalEnd: endDate });
+    setDragStartX(e.clientX);
+    setDragStartDate(startDateObj);
+  };
+
+  // Add global mouse event listeners for dragging
+  useEffect(() => {
+    if (!draggedItem || !dragStartDate) return;
+
+    let lastUpdateTime = 0;
+    const throttleDelay = 50; // Update max every 50ms for performance
+    let lastDayDiff = 0;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const now = Date.now();
+      if (now - lastUpdateTime < throttleDelay) return;
+      lastUpdateTime = now;
+
+      const newDate = getDateFromX(e.clientX, viewConfig, timeUnits);
+      if (!newDate) return;
+      
+      const dayDiff = differenceInDays(newDate, dragStartDate);
+      if (dayDiff === lastDayDiff) return; // No change
+      lastDayDiff = dayDiff;
+
+      const originalStart = parseISO(draggedItem.originalStart);
+      const originalEnd = parseISO(draggedItem.originalEnd);
+
+      if (draggedItem.type === 'project') {
+        const project = projects.find(p => p.id === draggedItem.id);
+        if (project) {
+          updateProject({
+            ...project,
+            startDate: format(addDays(originalStart, dayDiff), 'yyyy-MM-dd'),
+            endDate: format(addDays(originalEnd, dayDiff), 'yyyy-MM-dd'),
+          });
+        }
+      } else if (draggedItem.type === 'task') {
+        const task = tasks.find(t => t.id === draggedItem.id);
+        if (task) {
+          updateTask({
+            ...task,
+            startDate: format(addDays(originalStart, dayDiff), 'yyyy-MM-dd'),
+            endDate: format(addDays(originalEnd, dayDiff), 'yyyy-MM-dd'),
+          });
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      setDraggedItem(null);
+      setDragStartX(0);
+      setDragStartDate(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggedItem, dragStartDate, projects, tasks, updateProject, updateTask, viewConfig, timeUnits]);
+
   return (
     <>
       <Header title="Gantt Chart" onAddClick={() => setShowModal(true)} />
@@ -323,7 +410,7 @@ export default function GanttChart() {
           </div>
         </div>
 
-        <div className="gantt-container" style={{ overflowX: 'auto' }}>
+        <div ref={containerRef} className="gantt-container" style={{ overflowX: 'auto' }}>
           {/* Header */}
           <div className="gantt-header">
             <div className="gantt-task-names">Project / Task</div>
@@ -370,11 +457,17 @@ export default function GanttChart() {
                       style={{
                         ...barStyle,
                         background: project.color,
-                        cursor: 'pointer',
+                        cursor: draggedItem?.id === project.id ? 'grabbing' : 'grab',
                         fontSize: viewMode === 'year' ? 11 : 13,
+                        userSelect: 'none',
                       }}
-                      onClick={() => handleProjectClick(project)}
-                      title="Click to view details"
+                      onMouseDown={(e) => handleBarMouseDown(e, 'project', project.id, project.startDate, project.endDate)}
+                      onClick={(e) => {
+                        if (!draggedItem) {
+                          handleProjectClick(project);
+                        }
+                      }}
+                      title="Drag to move, click to view details"
                     >
                       {project.name}
                     </div>
@@ -415,11 +508,17 @@ export default function GanttChart() {
                         ...barStyle,
                         background: task.color,
                         opacity: 0.8,
-                        cursor: 'pointer',
+                        cursor: draggedItem?.id === task.id ? 'grabbing' : 'grab',
                         fontSize: viewMode === 'year' ? 11 : 13,
+                        userSelect: 'none',
                       }}
-                      onClick={() => handleTaskClick(task)}
-                      title="Click to view details"
+                      onMouseDown={(e) => handleBarMouseDown(e, 'task', task.id, task.startDate!, task.endDate!)}
+                      onClick={(e) => {
+                        if (!draggedItem) {
+                          handleTaskClick(task);
+                        }
+                      }}
+                      title="Drag to move, click to view details"
                     >
                       {task.title}
                     </div>

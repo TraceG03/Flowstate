@@ -35,12 +35,34 @@ export default function Tasks() {
     reminderTime: '',
   });
 
-  const filteredTasks = tasks.filter(task => {
-    if (filter.status !== 'all' && task.status !== filter.status) return false;
-    if (filter.priority !== 'all' && task.priority !== filter.priority) return false;
-    if (filter.tag !== 'all' && !task.tags.includes(filter.tag)) return false;
-    return true;
-  });
+  const filteredTasks = tasks
+    .filter(task => {
+      if (filter.status !== 'all' && task.status !== filter.status) return false;
+      if (filter.priority !== 'all' && task.priority !== filter.priority) return false;
+      if (filter.tag !== 'all' && !task.tags.includes(filter.tag)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      // Sort incomplete tasks first, completed tasks last
+      if (a.status === 'done' && b.status !== 'done') return 1;
+      if (a.status !== 'done' && b.status === 'done') return -1;
+      
+      // Within incomplete tasks, sort by priority (urgent > high > medium > low)
+      const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+      if (a.status !== 'done' && b.status !== 'done') {
+        const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+        if (priorityDiff !== 0) return priorityDiff;
+      }
+      
+      // Then by due date (earlier dates first, no date last)
+      if (a.dueDate && b.dueDate) {
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      }
+      if (a.dueDate && !b.dueDate) return -1;
+      if (!a.dueDate && b.dueDate) return 1;
+      
+      return 0;
+    });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

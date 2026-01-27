@@ -170,3 +170,16 @@ export interface NotificationItem {
   timestamp: string;
   dismissed: boolean;
 }
+
+// Daily Planner items
+export interface PlannerItem {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  color: string;
+  completed: boolean;
+  taskId?: string; // Optional link to existing task
+}

@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useEffect, type ReactNode } from
 import { v4 as uuidv4 } from 'uuid';
 import type {
   Task, Event, Project, Habit, Goal, Channel, Template, Reminder,
-  Tag, TimeBlock, Note, WeeklyReview, NoteItem
+  Tag, TimeBlock, Note, WeeklyReview, NoteItem, PlannerItem
 } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
@@ -19,6 +19,7 @@ interface AppState {
   tags: Tag[];
   weeklyReviews: WeeklyReview[];
   notes: NoteItem[];
+  plannerItems: PlannerItem[];
   currentView: string;
   selectedDate: string;
   sidebarOpen: boolean;
@@ -67,6 +68,10 @@ type Action =
   | { type: 'UPDATE_NOTE'; payload: NoteItem }
   | { type: 'DELETE_NOTE'; payload: string }
   | { type: 'SET_NOTES'; payload: NoteItem[] }
+  | { type: 'ADD_PLANNER_ITEM'; payload: PlannerItem }
+  | { type: 'UPDATE_PLANNER_ITEM'; payload: PlannerItem }
+  | { type: 'DELETE_PLANNER_ITEM'; payload: string }
+  | { type: 'SET_PLANNER_ITEMS'; payload: PlannerItem[] }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'LOAD_STATE'; payload: Partial<AppState> };
 
@@ -133,6 +138,7 @@ const initialState: AppState = {
   tags: initialTags,
   weeklyReviews: [],
   notes: [],
+  plannerItems: [],
   currentView: 'dashboard',
   selectedDate: new Date().toISOString().split('T')[0],
   sidebarOpen: true,
@@ -300,6 +306,17 @@ function appReducer(state: AppState, action: Action): AppState {
       return { ...state, notes: state.notes.filter(n => n.id !== action.payload) };
     case 'SET_NOTES':
       return { ...state, notes: action.payload };
+    case 'ADD_PLANNER_ITEM':
+      return { ...state, plannerItems: [...state.plannerItems, action.payload] };
+    case 'UPDATE_PLANNER_ITEM':
+      return {
+        ...state,
+        plannerItems: state.plannerItems.map(p => p.id === action.payload.id ? action.payload : p)
+      };
+    case 'DELETE_PLANNER_ITEM':
+      return { ...state, plannerItems: state.plannerItems.filter(p => p.id !== action.payload) };
+    case 'SET_PLANNER_ITEMS':
+      return { ...state, plannerItems: action.payload };
     case 'LOAD_STATE':
       return { ...state, ...action.payload, loading: false };
     default:
@@ -335,6 +352,10 @@ interface AppContextType {
   addNote: (note: Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateNote: (note: NoteItem) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
+  // Planner Item operations
+  addPlannerItem: (item: Omit<PlannerItem, 'id'>) => Promise<void>;
+  updatePlannerItem: (item: PlannerItem) => Promise<void>;
+  deletePlannerItem: (id: string) => Promise<void>;
   // Reminder operations
   addReminder: (reminder: Omit<Reminder, 'id' | 'dismissed'>) => void;
   // Template operations
@@ -362,6 +383,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             { data: habits },
             { data: goals },
             { data: notes },
+            { data: plannerItems },
           ] = await Promise.all([
             supabase.from('tasks').select('*').eq('user_id', user.id),
             supabase.from('events').select('*').eq('user_id', user.id),
@@ -369,6 +391,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             supabase.from('habits').select('*').eq('user_id', user.id),
             supabase.from('goals').select('*').eq('user_id', user.id),
             supabase.from('notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+            supabase.from('planner_items').select('*').eq('user_id', user.id).order('date', { ascending: true }),
           ]);
 
           dispatch({
@@ -413,6 +436,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 ...n,
                 createdAt: n.created_at,
                 updatedAt: n.updated_at,
+              })),
+              plannerItems: (plannerItems || []).map(p => ({
+                id: p.id,
+                title: p.title,
+                description: p.description || '',
+                date: p.date,
+                startTime: p.start_time,
+                endTime: p.end_time,
+                color: p.color,
+                completed: p.completed,
+                taskId: p.task_id || undefined,
               })),
             },
           });
@@ -794,6 +828,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Planner Item operations
+  const addPlannerItem = async (item: Omit<PlannerItem, 'id'>) => {
+    const newItem: PlannerItem = {
+      ...item,
+      id: uuidv4(),
+    };
+
+    dispatch({ type: 'ADD_PLANNER_ITEM', payload: newItem });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('planner_items').insert({
+        id: newItem.id,
+        user_id: user.id,
+        title: newItem.title,
+        description: newItem.description,
+        date: newItem.date,
+        start_time: newItem.startTime,
+        end_time: newItem.endTime,
+        color: newItem.color,
+        completed: newItem.completed,
+        task_id: newItem.taskId || null,
+      });
+      if (error) console.error('Error adding planner item:', error);
+    }
+  };
+
+  const updatePlannerItem = async (item: PlannerItem) => {
+    dispatch({ type: 'UPDATE_PLANNER_ITEM', payload: item });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('planner_items').update({
+        title: item.title,
+        description: item.description,
+        date: item.date,
+        start_time: item.startTime,
+        end_time: item.endTime,
+        color: item.color,
+        completed: item.completed,
+        task_id: item.taskId || null,
+      }).eq('id', item.id).eq('user_id', user.id);
+      if (error) console.error('Error updating planner item:', error);
+    }
+  };
+
+  const deletePlannerItem = async (id: string) => {
+    dispatch({ type: 'DELETE_PLANNER_ITEM', payload: id });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('planner_items').delete().eq('id', id).eq('user_id', user.id);
+      if (error) console.error('Error deleting planner item:', error);
+    }
+  };
+
   // Reminder operations
   const addReminder = (reminder: Omit<Reminder, 'id' | 'dismissed'>) => {
     const newReminder: Reminder = {
@@ -863,6 +950,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addNote,
       updateNote,
       deleteNote,
+      // Planner Item operations
+      addPlannerItem,
+      updatePlannerItem,
+      deletePlannerItem,
       // Reminder operations
       addReminder,
       // Template operations

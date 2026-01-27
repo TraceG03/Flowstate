@@ -4,47 +4,16 @@ import Header from './Header';
 import Modal from './Modal';
 import { Plus, ChevronLeft, ChevronRight, Trash2, Clock, Calendar, GripVertical } from 'lucide-react';
 import { format, addDays, subDays, parseISO, setHours, isToday } from 'date-fns';
-import { v4 as uuidv4 } from 'uuid';
+import type { PlannerItem } from '../types';
 
 const hours = Array.from({ length: 17 }, (_, i) => i + 6); // 6 AM to 10 PM
 
-// Local storage key for daily planner items
-const PLANNER_STORAGE_KEY = 'flowstate-daily-planner';
-
-interface PlannerItem {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  color: string;
-  completed: boolean;
-  taskId?: string; // Optional link to existing task
-}
-
-// Load planner items from localStorage
-const loadPlannerItems = (): PlannerItem[] => {
-  try {
-    const saved = localStorage.getItem(PLANNER_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  } catch {
-    return [];
-  }
-};
-
-// Save planner items to localStorage
-const savePlannerItems = (items: PlannerItem[]) => {
-  localStorage.setItem(PLANNER_STORAGE_KEY, JSON.stringify(items));
-};
-
 export default function TimeBlocking() {
-  const { state } = useApp();
-  const { tasks, events } = state;
+  const { state, addPlannerItem, updatePlannerItem, deletePlannerItem } = useApp();
+  const { tasks, events, plannerItems } = state;
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showModal, setShowModal] = useState(false);
-  const [plannerItems, setPlannerItems] = useState<PlannerItem[]>(loadPlannerItems);
   const [editingItem, setEditingItem] = useState<PlannerItem | null>(null);
   
   // Drag state - supports move, resize-top, and resize-bottom
@@ -122,25 +91,18 @@ export default function TimeBlocking() {
 
     if (editingItem) {
       // Update existing item
-      const updatedItems = plannerItems.map(item =>
-        item.id === editingItem.id
-          ? {
-              ...item,
-              title: newBlock.title,
-              description: newBlock.description,
-              startTime,
-              endTime,
-              color: newBlock.color,
-              taskId: newBlock.taskId || undefined,
-            }
-          : item
-      );
-      setPlannerItems(updatedItems);
-      savePlannerItems(updatedItems);
+      updatePlannerItem({
+        ...editingItem,
+        title: newBlock.title,
+        description: newBlock.description,
+        startTime,
+        endTime,
+        color: newBlock.color,
+        taskId: newBlock.taskId || undefined,
+      });
     } else {
       // Create new item
-      const newItem: PlannerItem = {
-        id: uuidv4(),
+      addPlannerItem({
         title: newBlock.title,
         description: newBlock.description,
         date: dateStr,
@@ -149,10 +111,7 @@ export default function TimeBlocking() {
         color: newBlock.color,
         completed: false,
         taskId: newBlock.taskId || undefined,
-      };
-      const updatedItems = [...plannerItems, newItem];
-      setPlannerItems(updatedItems);
-      savePlannerItems(updatedItems);
+      });
     }
 
     setShowModal(false);
@@ -178,17 +137,14 @@ export default function TimeBlocking() {
   };
 
   const handleDeleteItem = (id: string) => {
-    const updatedItems = plannerItems.filter(item => item.id !== id);
-    setPlannerItems(updatedItems);
-    savePlannerItems(updatedItems);
+    deletePlannerItem(id);
   };
 
   const handleToggleComplete = (id: string) => {
-    const updatedItems = plannerItems.map(item =>
-      item.id === id ? { ...item, completed: !item.completed } : item
-    );
-    setPlannerItems(updatedItems);
-    savePlannerItems(updatedItems);
+    const item = plannerItems.find(p => p.id === id);
+    if (item) {
+      updatePlannerItem({ ...item, completed: !item.completed });
+    }
   };
 
   const pendingTasks = tasks.filter(t => t.status !== 'done');
@@ -257,6 +213,9 @@ export default function TimeBlocking() {
     });
   };
 
+  // Track pending updates during drag to avoid excessive Supabase calls
+  const pendingUpdateRef = useRef<PlannerItem | null>(null);
+
   // Handle drag/resize with useEffect for global mouse events
   useEffect(() => {
     if (!draggedItem) return;
@@ -322,25 +281,24 @@ export default function TimeBlocking() {
         newEndTime = formatTime(newEndHour, newEndMin);
       }
       
-      // Update the item in real-time
-      const updatedItems = plannerItems.map(item =>
-        item.id === draggedItem.id
-          ? { ...item, startTime: newStartTime, endTime: newEndTime }
-          : item
-      );
-      setPlannerItems(updatedItems);
+      // Find the current item and store the pending update
+      const currentItem = plannerItems.find(item => item.id === draggedItem.id);
+      if (currentItem) {
+        pendingUpdateRef.current = { ...currentItem, startTime: newStartTime, endTime: newEndTime };
+        // Update via context (optimistic update)
+        updatePlannerItem(pendingUpdateRef.current);
+      }
     };
 
     const handleMouseUp = () => {
       if (draggedItem) {
-        // Save to localStorage when drag ends
-        savePlannerItems(plannerItems);
         // Set flag to prevent click handler from opening edit modal
         justFinishedDragging.current = true;
         // Reset the flag after a short delay
         setTimeout(() => {
           justFinishedDragging.current = false;
         }, 100);
+        pendingUpdateRef.current = null;
       }
       setDraggedItem(null);
     };
@@ -352,7 +310,7 @@ export default function TimeBlocking() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [draggedItem, plannerItems]);
+  }, [draggedItem, plannerItems, updatePlannerItem]);
 
   return (
     <>

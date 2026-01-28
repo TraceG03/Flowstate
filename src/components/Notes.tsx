@@ -12,9 +12,22 @@ export default function Notes() {
   const [searchQuery, setSearchQuery] = useState('');
   const [fontSize, setFontSize] = useState('16');
   const [lineSpacing, setLineSpacing] = useState('1.7');
+  const [textColor, setTextColor] = useState('#f0f2f5');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const fontSizes = ['12', '14', '16', '18', '20', '24', '28', '32'];
+  const textColors = [
+    { label: 'Default', value: '#f0f2f5' },
+    { label: 'White', value: '#ffffff' },
+    { label: 'Gray', value: '#9ca3af' },
+    { label: 'Red', value: '#ef4444' },
+    { label: 'Orange', value: '#f97316' },
+    { label: 'Yellow', value: '#eab308' },
+    { label: 'Green', value: '#22c55e' },
+    { label: 'Blue', value: '#3b82f6' },
+    { label: 'Purple', value: '#8b5cf6' },
+    { label: 'Pink', value: '#ec4899' },
+  ];
   const lineSpacings = [
     { label: 'Compact', value: '1.3' },
     { label: 'Normal', value: '1.7' },
@@ -228,6 +241,23 @@ export default function Notes() {
                     </select>
                   </div>
 
+                  <div className="format-group">
+                    <label className="format-label">Color</label>
+                    <select
+                      value={textColor}
+                      onChange={(e) => setTextColor(e.target.value)}
+                      className="format-select"
+                      title="Text Color"
+                      style={{ color: textColor }}
+                    >
+                      {textColors.map(color => (
+                        <option key={color.value} value={color.value} style={{ color: color.value }}>
+                          {color.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="format-divider" />
 
                   <button
@@ -267,6 +297,7 @@ export default function Notes() {
                     style={{
                       fontSize: `${fontSize}px`,
                       lineHeight: lineSpacing,
+                      color: textColor,
                     }}
                   />
                 </div>

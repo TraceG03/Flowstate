@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
-import { Plus, FileText, Search, Trash2, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered } from 'lucide-react';
+import { Plus, FileText, Search, Trash2, List, Minus } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 export default function Notes() {
@@ -10,64 +10,54 @@ export default function Notes() {
 
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentFont, setCurrentFont] = useState('Inter');
-  const [currentSize, setCurrentSize] = useState('16');
-  const editorRef = useRef<HTMLDivElement>(null);
+  const [fontSize, setFontSize] = useState('16');
+  const [lineSpacing, setLineSpacing] = useState('1.7');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const fonts = [
-    'Inter',
-    'Arial',
-    'Georgia',
-    'Times New Roman',
-    'Courier New',
-    'Verdana',
-    'Comic Sans MS',
+  const fontSizes = ['12', '14', '16', '18', '20', '24', '28', '32'];
+  const lineSpacings = [
+    { label: 'Compact', value: '1.3' },
+    { label: 'Normal', value: '1.7' },
+    { label: 'Relaxed', value: '2.0' },
+    { label: 'Loose', value: '2.5' },
   ];
 
-  const fontSizes = ['12', '14', '16', '18', '20', '24', '28', '32', '36', '48'];
-
-  const execFormatCommand = (command: string, value?: string) => {
-    document.execCommand(command, false, value);
-    editorRef.current?.focus();
-  };
-
-  const handleFontChange = (font: string) => {
-    setCurrentFont(font);
-    execFormatCommand('fontName', font);
-  };
-
-  const handleSizeChange = (size: string) => {
-    setCurrentSize(size);
-    // execCommand fontSize only accepts 1-7, so we use a different approach
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      if (!range.collapsed) {
-        const span = document.createElement('span');
-        span.style.fontSize = `${size}px`;
-        range.surroundContents(span);
-      }
+  const insertBulletPoint = () => {
+    if (!textareaRef.current || !selectedNote) return;
+    
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    
+    // Check if we're at the start of a line
+    const beforeCursor = text.substring(0, start);
+    const lineStart = beforeCursor.lastIndexOf('\n') + 1;
+    const currentLineStart = text.substring(lineStart, start);
+    
+    let newText: string;
+    let newCursorPos: number;
+    
+    if (currentLineStart.trim() === '' && start === lineStart) {
+      // At the start of a line, add bullet
+      newText = text.substring(0, start) + '• ' + text.substring(end);
+      newCursorPos = start + 2;
+    } else {
+      // In the middle of text, add new line with bullet
+      newText = text.substring(0, start) + '\n• ' + text.substring(end);
+      newCursorPos = start + 3;
     }
-    editorRef.current?.focus();
-  };
-
-  const handleEditorInput = () => {
-    if (editorRef.current && selectedNote) {
-      const content = editorRef.current.innerHTML;
-      handleUpdateNote(selectedNote, { content });
-    }
+    
+    handleUpdateNote(selectedNote, { content: newText });
+    
+    // Set cursor position after React re-renders
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
   };
 
   const currentNote = notes.find(n => n.id === selectedNote);
-
-  // Update editor content when note changes
-  useEffect(() => {
-    if (editorRef.current && currentNote) {
-      if (editorRef.current.innerHTML !== currentNote.content) {
-        editorRef.current.innerHTML = currentNote.content;
-      }
-    }
-  }, [selectedNote, currentNote]);
 
   const createNote = () => {
     addNote({
@@ -206,106 +196,78 @@ export default function Notes() {
                 </div>
                 {/* Formatting Toolbar */}
                 <div className="notes-formatting-toolbar">
-                  <select
-                    value={currentFont}
-                    onChange={(e) => handleFontChange(e.target.value)}
-                    className="format-select"
-                    title="Font Family"
-                  >
-                    {fonts.map(font => (
-                      <option key={font} value={font} style={{ fontFamily: font }}>
-                        {font}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="format-group">
+                    <label className="format-label">Size</label>
+                    <select
+                      value={fontSize}
+                      onChange={(e) => setFontSize(e.target.value)}
+                      className="format-select"
+                      title="Font Size"
+                    >
+                      {fontSizes.map(size => (
+                        <option key={size} value={size}>
+                          {size}px
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                  <select
-                    value={currentSize}
-                    onChange={(e) => handleSizeChange(e.target.value)}
-                    className="format-select"
-                    title="Font Size"
-                  >
-                    {fontSizes.map(size => (
-                      <option key={size} value={size}>
-                        {size}px
-                      </option>
-                    ))}
-                  </select>
-
-                  <div className="format-divider" />
-
-                  <button
-                    className="format-btn"
-                    onClick={() => execFormatCommand('bold')}
-                    title="Bold (Ctrl+B)"
-                  >
-                    <Bold size={16} />
-                  </button>
-                  <button
-                    className="format-btn"
-                    onClick={() => execFormatCommand('italic')}
-                    title="Italic (Ctrl+I)"
-                  >
-                    <Italic size={16} />
-                  </button>
-                  <button
-                    className="format-btn"
-                    onClick={() => execFormatCommand('underline')}
-                    title="Underline (Ctrl+U)"
-                  >
-                    <Underline size={16} />
-                  </button>
+                  <div className="format-group">
+                    <label className="format-label">Spacing</label>
+                    <select
+                      value={lineSpacing}
+                      onChange={(e) => setLineSpacing(e.target.value)}
+                      className="format-select"
+                      title="Line Spacing"
+                    >
+                      {lineSpacings.map(spacing => (
+                        <option key={spacing.value} value={spacing.value}>
+                          {spacing.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
                   <div className="format-divider" />
 
                   <button
                     className="format-btn"
-                    onClick={() => execFormatCommand('justifyLeft')}
-                    title="Align Left"
-                  >
-                    <AlignLeft size={16} />
-                  </button>
-                  <button
-                    className="format-btn"
-                    onClick={() => execFormatCommand('justifyCenter')}
-                    title="Align Center"
-                  >
-                    <AlignCenter size={16} />
-                  </button>
-                  <button
-                    className="format-btn"
-                    onClick={() => execFormatCommand('justifyRight')}
-                    title="Align Right"
-                  >
-                    <AlignRight size={16} />
-                  </button>
-
-                  <div className="format-divider" />
-
-                  <button
-                    className="format-btn"
-                    onClick={() => execFormatCommand('insertUnorderedList')}
-                    title="Bullet List"
+                    onClick={insertBulletPoint}
+                    title="Insert Bullet Point"
                   >
                     <List size={16} />
                   </button>
                   <button
                     className="format-btn"
-                    onClick={() => execFormatCommand('insertOrderedList')}
-                    title="Numbered List"
+                    onClick={() => {
+                      if (textareaRef.current && selectedNote) {
+                        const textarea = textareaRef.current;
+                        const start = textarea.selectionStart;
+                        const text = textarea.value;
+                        const newText = text.substring(0, start) + '—' + text.substring(start);
+                        handleUpdateNote(selectedNote, { content: newText });
+                        setTimeout(() => {
+                          textarea.focus();
+                          textarea.setSelectionRange(start + 1, start + 1);
+                        }, 0);
+                      }
+                    }}
+                    title="Insert Dash"
                   >
-                    <ListOrdered size={16} />
+                    <Minus size={16} />
                   </button>
                 </div>
 
                 <div className="notes-editor-content">
-                  <div
-                    ref={editorRef}
-                    className="rich-text-editor"
-                    contentEditable
-                    onInput={handleEditorInput}
-                    data-placeholder="Start writing your note..."
-                    style={{ fontFamily: currentFont }}
+                  <textarea
+                    ref={textareaRef}
+                    value={currentNote.content}
+                    onChange={(e) => handleUpdateNote(currentNote.id, { content: e.target.value })}
+                    placeholder="Start writing your note..."
+                    style={{
+                      fontSize: `${fontSize}px`,
+                      lineHeight: lineSpacing,
+                    }}
                   />
                 </div>
               </>

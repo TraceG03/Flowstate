@@ -419,7 +419,7 @@ export default function TimeBlocking() {
                         transition: isDragging ? 'none' : 'box-shadow 0.2s ease',
                       }}
                       onMouseDown={(e) => handleDragStart(e, item)}
-                      onClick={(e) => {
+                      onDoubleClick={(e) => {
                         e.stopPropagation();
                         // Only open edit modal if not dragging and didn't just finish dragging
                         if (!draggedItem && !justFinishedDragging.current) {

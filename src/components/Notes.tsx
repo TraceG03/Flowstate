@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
-import { Plus, FileText, Search, Trash2 } from 'lucide-react';
+import { Plus, FileText, Search, Trash2, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 export default function Notes() {
@@ -10,6 +10,64 @@ export default function Notes() {
 
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentFont, setCurrentFont] = useState('Inter');
+  const [currentSize, setCurrentSize] = useState('16');
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  const fonts = [
+    'Inter',
+    'Arial',
+    'Georgia',
+    'Times New Roman',
+    'Courier New',
+    'Verdana',
+    'Comic Sans MS',
+  ];
+
+  const fontSizes = ['12', '14', '16', '18', '20', '24', '28', '32', '36', '48'];
+
+  const execFormatCommand = (command: string, value?: string) => {
+    document.execCommand(command, false, value);
+    editorRef.current?.focus();
+  };
+
+  const handleFontChange = (font: string) => {
+    setCurrentFont(font);
+    execFormatCommand('fontName', font);
+  };
+
+  const handleSizeChange = (size: string) => {
+    setCurrentSize(size);
+    // execCommand fontSize only accepts 1-7, so we use a different approach
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (!range.collapsed) {
+        const span = document.createElement('span');
+        span.style.fontSize = `${size}px`;
+        range.surroundContents(span);
+      }
+    }
+    editorRef.current?.focus();
+  };
+
+  const handleEditorInput = () => {
+    if (editorRef.current && selectedNote) {
+      const content = editorRef.current.innerHTML;
+      handleUpdateNote(selectedNote, { content });
+    }
+  };
+
+  const currentNote = notes.find(n => n.id === selectedNote);
+
+  // Update editor content when note changes
+  useEffect(() => {
+    if (editorRef.current && currentNote) {
+      if (editorRef.current.innerHTML !== currentNote.content) {
+        editorRef.current.innerHTML = currentNote.content;
+      }
+    }
+  }, [selectedNote, currentNote]);
 
   const createNote = () => {
     addNote({
@@ -40,8 +98,6 @@ export default function Notes() {
     note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     note.content.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const currentNote = notes.find(n => n.id === selectedNote);
 
   const colors = [
     '#6366f1', '#8b5cf6', '#ec4899', '#ef4444',
@@ -148,11 +204,108 @@ export default function Notes() {
                     <Trash2 size={16} />
                   </button>
                 </div>
+                {/* Formatting Toolbar */}
+                <div className="notes-formatting-toolbar">
+                  <select
+                    value={currentFont}
+                    onChange={(e) => handleFontChange(e.target.value)}
+                    className="format-select"
+                    title="Font Family"
+                  >
+                    {fonts.map(font => (
+                      <option key={font} value={font} style={{ fontFamily: font }}>
+                        {font}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={currentSize}
+                    onChange={(e) => handleSizeChange(e.target.value)}
+                    className="format-select"
+                    title="Font Size"
+                  >
+                    {fontSizes.map(size => (
+                      <option key={size} value={size}>
+                        {size}px
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="format-divider" />
+
+                  <button
+                    className="format-btn"
+                    onClick={() => execFormatCommand('bold')}
+                    title="Bold (Ctrl+B)"
+                  >
+                    <Bold size={16} />
+                  </button>
+                  <button
+                    className="format-btn"
+                    onClick={() => execFormatCommand('italic')}
+                    title="Italic (Ctrl+I)"
+                  >
+                    <Italic size={16} />
+                  </button>
+                  <button
+                    className="format-btn"
+                    onClick={() => execFormatCommand('underline')}
+                    title="Underline (Ctrl+U)"
+                  >
+                    <Underline size={16} />
+                  </button>
+
+                  <div className="format-divider" />
+
+                  <button
+                    className="format-btn"
+                    onClick={() => execFormatCommand('justifyLeft')}
+                    title="Align Left"
+                  >
+                    <AlignLeft size={16} />
+                  </button>
+                  <button
+                    className="format-btn"
+                    onClick={() => execFormatCommand('justifyCenter')}
+                    title="Align Center"
+                  >
+                    <AlignCenter size={16} />
+                  </button>
+                  <button
+                    className="format-btn"
+                    onClick={() => execFormatCommand('justifyRight')}
+                    title="Align Right"
+                  >
+                    <AlignRight size={16} />
+                  </button>
+
+                  <div className="format-divider" />
+
+                  <button
+                    className="format-btn"
+                    onClick={() => execFormatCommand('insertUnorderedList')}
+                    title="Bullet List"
+                  >
+                    <List size={16} />
+                  </button>
+                  <button
+                    className="format-btn"
+                    onClick={() => execFormatCommand('insertOrderedList')}
+                    title="Numbered List"
+                  >
+                    <ListOrdered size={16} />
+                  </button>
+                </div>
+
                 <div className="notes-editor-content">
-                  <textarea
-                    value={currentNote.content}
-                    onChange={(e) => handleUpdateNote(currentNote.id, { content: e.target.value })}
-                    placeholder="Start writing your note..."
+                  <div
+                    ref={editorRef}
+                    className="rich-text-editor"
+                    contentEditable
+                    onInput={handleEditorInput}
+                    data-placeholder="Start writing your note..."
+                    style={{ fontFamily: currentFont }}
                   />
                 </div>
               </>

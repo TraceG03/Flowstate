@@ -26,7 +26,7 @@ export default function CalendarView() {
     endDate: '',
     allDay: false,
     color: '#6366f1',
-    recurring: 'none' as const,
+    recurring: 'none' as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
     reminder: null as number | null,
   });
 

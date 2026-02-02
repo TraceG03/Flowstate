@@ -40,7 +40,7 @@ export default function Header({ title, onAddClick }: HeaderProps) {
         {onAddClick && (
           <button className="btn btn-primary" onClick={onAddClick}>
             <Plus size={18} />
-            Add New
+            <span className="btn-text">Add New</span>
           </button>
         )}
       </div>

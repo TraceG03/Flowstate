@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import type { NotificationItem } from '../types';
 
 export function useNotifications() {
-  const { state, dispatch } = useApp();
+  const { state, dismissReminder: dismissReminderFromContext } = useApp();
   const reminders = state?.reminders || [];
   const tasks = state?.tasks || [];
   const goals = state?.goals || [];
@@ -54,10 +54,10 @@ export function useNotifications() {
     ));
   }, []);
 
-  // Dismiss a reminder in the app state
+  // Dismiss a reminder in the app state (syncs with Supabase)
   const dismissReminder = useCallback((id: string) => {
-    dispatch({ type: 'DISMISS_REMINDER', payload: id });
-  }, [dispatch]);
+    dismissReminderFromContext(id);
+  }, [dismissReminderFromContext]);
 
   // Clear all dismissed notifications
   const clearDismissed = useCallback(() => {

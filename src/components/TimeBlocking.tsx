@@ -318,15 +318,15 @@ export default function TimeBlocking() {
       <div className="content">
         {/* Date Navigation */}
         <div className="card mb-6">
-          <div className="flex items-center justify-between">
+          <div className="planner-date-nav">
             <button
               className="btn btn-secondary btn-icon"
               onClick={() => setSelectedDate(subDays(selectedDate, 1))}
             >
               <ChevronLeft size={20} />
             </button>
-            <div className="text-center">
-              <h2 className="flex items-center justify-center gap-2">
+            <div className="text-center" style={{ flex: 1, minWidth: 0 }}>
+              <h2 className="planner-date-title">
                 {isToday(selectedDate) && (
                   <span style={{ 
                     background: 'var(--gradient-primary)', 
@@ -338,13 +338,13 @@ export default function TimeBlocking() {
                     TODAY
                   </span>
                 )}
-                {format(selectedDate, 'EEEE')}
+                <span>{format(selectedDate, 'EEEE')}</span>
               </h2>
-              <p className="text-muted">{format(selectedDate, 'MMMM d, yyyy')}</p>
+              <p className="text-muted" style={{ fontSize: '0.85rem' }}>{format(selectedDate, 'MMM d, yyyy')}</p>
             </div>
             <div className="flex gap-2">
               <button
-                className="btn btn-secondary"
+                className="btn btn-secondary btn-today"
                 onClick={() => setSelectedDate(new Date())}
               >
                 Today
@@ -359,7 +359,7 @@ export default function TimeBlocking() {
           </div>
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns: '1fr 320px', gap: 24 }}>
+        <div className="planner-grid">
           {/* Time Grid */}
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div className="time-grid" ref={timeGridRef} style={{ position: 'relative' }}>

@@ -56,6 +56,7 @@ type Action =
   | { type: 'DELETE_TAG'; payload: string }
   | { type: 'ADD_REMINDER'; payload: Reminder }
   | { type: 'DISMISS_REMINDER'; payload: string }
+  | { type: 'DELETE_REMINDER'; payload: string }
   | { type: 'SET_VIEW'; payload: string }
   | { type: 'SET_DATE'; payload: string }
   | { type: 'TOGGLE_SIDEBAR' }
@@ -141,7 +142,7 @@ const initialState: AppState = {
   plannerItems: [],
   currentView: 'dashboard',
   selectedDate: new Date().toISOString().split('T')[0],
-  sidebarOpen: true,
+  sidebarOpen: typeof window !== 'undefined' ? window.innerWidth > 768 : true,
   darkMode: true,
   loading: true,
 };
@@ -265,6 +266,11 @@ function appReducer(state: AppState, action: Action): AppState {
           r.id === action.payload ? { ...r, dismissed: true } : r
         )
       };
+    case 'DELETE_REMINDER':
+      return {
+        ...state,
+        reminders: state.reminders.filter(r => r.id !== action.payload)
+      };
     case 'SET_VIEW':
       return { ...state, currentView: action.payload };
     case 'SET_DATE':
@@ -357,7 +363,9 @@ interface AppContextType {
   updatePlannerItem: (item: PlannerItem) => Promise<void>;
   deletePlannerItem: (id: string) => Promise<void>;
   // Reminder operations
-  addReminder: (reminder: Omit<Reminder, 'id' | 'dismissed'>) => void;
+  addReminder: (reminder: Omit<Reminder, 'id' | 'dismissed'>) => Promise<void>;
+  dismissReminder: (id: string) => Promise<void>;
+  deleteReminder: (id: string) => Promise<void>;
   // Template operations
   applyTemplate: (templateId: string) => void;
 }
@@ -382,17 +390,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
             { data: projects },
             { data: habits },
             { data: goals },
+            { data: milestones },
             { data: notes },
             { data: plannerItems },
+            { data: reminders },
           ] = await Promise.all([
             supabase.from('tasks').select('*').eq('user_id', user.id),
             supabase.from('events').select('*').eq('user_id', user.id),
             supabase.from('projects').select('*').eq('user_id', user.id),
             supabase.from('habits').select('*').eq('user_id', user.id),
             supabase.from('goals').select('*').eq('user_id', user.id),
+            supabase.from('milestones').select('*'),
             supabase.from('notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
             supabase.from('planner_items').select('*').eq('user_id', user.id).order('date', { ascending: true }),
+            supabase.from('reminders').select('*').eq('user_id', user.id).order('date_time', { ascending: true }),
           ]);
+
+          // Group milestones by goal_id
+          const milestonesByGoal = (milestones || []).reduce((acc: Record<string, any[]>, m: any) => {
+            if (!acc[m.goal_id]) acc[m.goal_id] = [];
+            acc[m.goal_id].push({
+              id: m.id,
+              title: m.title,
+              completed: m.completed,
+              completedAt: m.completed_at,
+            });
+            return acc;
+          }, {});
 
           dispatch({
             type: 'LOAD_STATE',
@@ -429,7 +453,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               })),
               goals: (goals || []).map(g => ({
                 ...g,
-                milestones: [],
+                milestones: milestonesByGoal[g.id] || [],
                 targetDate: g.target_date,
               })),
               notes: (notes || []).map(n => ({
@@ -447,6 +471,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 color: p.color,
                 completed: p.completed,
                 taskId: p.task_id || undefined,
+              })),
+              reminders: (reminders || []).map(r => ({
+                id: r.id,
+                title: r.title,
+                message: r.message,
+                dateTime: r.date_time,
+                taskId: r.task_id,
+                eventId: r.event_id,
+                dismissed: r.dismissed,
               })),
             },
           });
@@ -602,7 +635,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newGoal: Goal = { ...goal, id: uuidv4(), achieved: false, progress: 0 };
 
     if (isSupabaseConfigured && supabase && user) {
-      const { error } = await supabase.from('goals').insert({
+      // Insert the goal
+      const { error: goalError } = await supabase.from('goals').insert({
         id: newGoal.id,
         user_id: user.id,
         title: newGoal.title,
@@ -611,7 +645,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         progress: 0,
         achieved: false,
       });
-      if (error) console.error('Error adding goal:', error);
+      if (goalError) console.error('Error adding goal:', goalError);
+
+      // Insert milestones if any
+      if (newGoal.milestones && newGoal.milestones.length > 0) {
+        const milestonesToInsert = newGoal.milestones.map(m => ({
+          id: m.id,
+          goal_id: newGoal.id,
+          title: m.title,
+          completed: m.completed || false,
+          completed_at: m.completedAt || null,
+        }));
+        const { error: milestoneError } = await supabase.from('milestones').insert(milestonesToInsert);
+        if (milestoneError) console.error('Error adding milestones:', milestoneError);
+      }
     }
 
     dispatch({ type: 'ADD_GOAL', payload: newGoal });
@@ -721,14 +768,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'UPDATE_GOAL', payload: goal });
 
     if (isSupabaseConfigured && supabase && user) {
-      const { error } = await supabase.from('goals').update({
+      // Update the goal itself
+      const { error: goalError } = await supabase.from('goals').update({
         title: goal.title,
         description: goal.description,
         target_date: goal.targetDate,
         progress: goal.progress,
         achieved: goal.achieved,
       }).eq('id', goal.id).eq('user_id', user.id);
-      if (error) console.error('Error updating goal:', error);
+      if (goalError) console.error('Error updating goal:', goalError);
+
+      // Get existing milestones from Supabase
+      const { data: existingMilestones } = await supabase
+        .from('milestones')
+        .select('id')
+        .eq('goal_id', goal.id);
+
+      const existingIds = (existingMilestones || []).map(m => m.id);
+      const newIds = goal.milestones.map(m => m.id);
+
+      // Delete removed milestones
+      const toDelete = existingIds.filter(id => !newIds.includes(id));
+      if (toDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('milestones')
+          .delete()
+          .in('id', toDelete);
+        if (deleteError) console.error('Error deleting milestones:', deleteError);
+      }
+
+      // Upsert milestones (insert new, update existing)
+      if (goal.milestones.length > 0) {
+        const milestonesToUpsert = goal.milestones.map(m => ({
+          id: m.id,
+          goal_id: goal.id,
+          title: m.title,
+          completed: m.completed,
+          completed_at: m.completedAt || null,
+        }));
+        const { error: upsertError } = await supabase
+          .from('milestones')
+          .upsert(milestonesToUpsert, { onConflict: 'id' });
+        if (upsertError) console.error('Error upserting milestones:', upsertError);
+      }
     }
   };
 
@@ -774,8 +856,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'DELETE_GOAL', payload: id });
 
     if (isSupabaseConfigured && supabase && user) {
-      const { error } = await supabase.from('goals').delete().eq('id', id).eq('user_id', user.id);
-      if (error) console.error('Error deleting goal:', error);
+      // Delete milestones first (due to foreign key constraint)
+      const { error: milestoneError } = await supabase
+        .from('milestones')
+        .delete()
+        .eq('goal_id', id);
+      if (milestoneError) console.error('Error deleting milestones:', milestoneError);
+
+      // Then delete the goal
+      const { error: goalError } = await supabase
+        .from('goals')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+      if (goalError) console.error('Error deleting goal:', goalError);
     }
   };
 
@@ -882,13 +976,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Reminder operations
-  const addReminder = (reminder: Omit<Reminder, 'id' | 'dismissed'>) => {
+  const addReminder = async (reminder: Omit<Reminder, 'id' | 'dismissed'>) => {
     const newReminder: Reminder = {
       ...reminder,
       id: uuidv4(),
       dismissed: false,
     };
+
     dispatch({ type: 'ADD_REMINDER', payload: newReminder });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('reminders').insert({
+        id: newReminder.id,
+        user_id: user.id,
+        title: newReminder.title,
+        message: newReminder.message,
+        date_time: newReminder.dateTime,
+        task_id: newReminder.taskId || null,
+        event_id: newReminder.eventId || null,
+        dismissed: false,
+      });
+      if (error) console.error('Error adding reminder:', error);
+    }
+  };
+
+  const dismissReminder = async (id: string) => {
+    dispatch({ type: 'DISMISS_REMINDER', payload: id });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('reminders').update({
+        dismissed: true,
+      }).eq('id', id).eq('user_id', user.id);
+      if (error) console.error('Error dismissing reminder:', error);
+    }
+  };
+
+  const deleteReminder = async (id: string) => {
+    dispatch({ type: 'DELETE_REMINDER', payload: id });
+
+    if (isSupabaseConfigured && supabase && user) {
+      const { error } = await supabase.from('reminders').delete().eq('id', id).eq('user_id', user.id);
+      if (error) console.error('Error deleting reminder:', error);
+    }
   };
 
   const applyTemplate = (templateId: string) => {
@@ -956,6 +1085,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deletePlannerItem,
       // Reminder operations
       addReminder,
+      dismissReminder,
+      deleteReminder,
       // Template operations
       applyTemplate,
     }}>

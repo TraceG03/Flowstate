@@ -2,20 +2,21 @@ import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import Header from './Header';
 import Modal from './Modal';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Save } from 'lucide-react';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isToday, isSameDay, parseISO, addMonths, subMonths, differenceInDays, addDays
 } from 'date-fns';
 
 export default function CalendarView() {
-  const { state, addEvent, updateEvent, updateTask } = useApp();
+  const { state, addEvent, updateEvent, deleteEvent, updateTask } = useApp();
   const { events, tasks } = state;
   const [draggedItem, setDraggedItem] = useState<{ type: 'event' | 'task'; id: string } | null>(null);
   const dragStartDateRef = useRef<Date | null>(null);
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showModal, setShowModal] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [, setSelectedDate] = useState<Date | null>(null);
 
   const [newEvent, setNewEvent] = useState({
@@ -112,21 +113,70 @@ export default function CalendarView() {
     dragStartDateRef.current = null;
   };
 
+  const handleEventClick = (e: React.MouseEvent, eventId: string) => {
+    e.stopPropagation();
+    const event = events.find(ev => ev.id === eventId);
+    if (event) {
+      setEditingEventId(eventId);
+      setNewEvent({
+        title: event.title,
+        description: event.description || '',
+        startDate: event.startDate,
+        endDate: event.endDate,
+        allDay: event.allDay || false,
+        color: event.color,
+        recurring: event.recurring || 'none',
+        reminder: event.reminder || null,
+      });
+      setShowModal(true);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEvent.title) return;
 
-    addEvent({
-      title: newEvent.title,
-      description: newEvent.description,
-      startDate: newEvent.startDate,
-      endDate: newEvent.endDate,
-      allDay: newEvent.allDay,
-      color: newEvent.color,
-      recurring: newEvent.recurring,
-      reminder: newEvent.reminder,
-    });
+    if (editingEventId) {
+      // Update existing event
+      const existingEvent = events.find(ev => ev.id === editingEventId);
+      if (existingEvent) {
+        updateEvent({
+          ...existingEvent,
+          title: newEvent.title,
+          description: newEvent.description,
+          startDate: newEvent.startDate,
+          endDate: newEvent.endDate,
+          allDay: newEvent.allDay,
+          color: newEvent.color,
+          recurring: newEvent.recurring,
+          reminder: newEvent.reminder,
+        });
+      }
+    } else {
+      // Add new event
+      addEvent({
+        title: newEvent.title,
+        description: newEvent.description,
+        startDate: newEvent.startDate,
+        endDate: newEvent.endDate,
+        allDay: newEvent.allDay,
+        color: newEvent.color,
+        recurring: newEvent.recurring,
+        reminder: newEvent.reminder,
+      });
+    }
 
+    resetForm();
+  };
+
+  const handleDeleteEvent = () => {
+    if (editingEventId) {
+      deleteEvent(editingEventId);
+      resetForm();
+    }
+  };
+
+  const resetForm = () => {
     setNewEvent({
       title: '',
       description: '',
@@ -137,6 +187,7 @@ export default function CalendarView() {
       recurring: 'none',
       reminder: null,
     });
+    setEditingEventId(null);
     setShowModal(false);
   };
 
@@ -150,12 +201,18 @@ export default function CalendarView() {
       <Header
         title="Calendar"
         onAddClick={() => {
+          setEditingEventId(null);
           setSelectedDate(new Date());
-          setNewEvent(prev => ({
-            ...prev,
+          setNewEvent({
+            title: '',
+            description: '',
             startDate: format(new Date(), "yyyy-MM-dd'T'09:00"),
             endDate: format(new Date(), "yyyy-MM-dd'T'10:00"),
-          }));
+            allDay: false,
+            color: '#6366f1',
+            recurring: 'none',
+            reminder: null,
+          });
           setShowModal(true);
         }}
       />
@@ -237,7 +294,7 @@ export default function CalendarView() {
                       }}
                       draggable
                       onDragStart={(e) => handleDragStart(e, 'event', event.id, event.startDate)}
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => handleEventClick(e, event.id)}
                     >
                       {event.title}
                     </div>
@@ -275,7 +332,7 @@ export default function CalendarView() {
       </div>
 
       {showModal && (
-        <Modal title="Add Event" onClose={() => setShowModal(false)}>
+        <Modal title={editingEventId ? "Edit Event" : "Add Event"} onClose={resetForm}>
           <form onSubmit={handleSubmit}>
             <div className="input-group">
               <label className="input-label">Event Title</label>
@@ -357,12 +414,23 @@ export default function CalendarView() {
             </div>
 
             <div className="modal-footer" style={{ margin: '0 -24px -24px', padding: '20px 24px' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+              {editingEventId && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleDeleteEvent}
+                  style={{ marginRight: 'auto', color: 'var(--color-error)' }}
+                >
+                  <Trash2 size={18} />
+                  Delete
+                </button>
+              )}
+              <button type="button" className="btn btn-secondary" onClick={resetForm}>
                 Cancel
               </button>
               <button type="submit" className="btn btn-primary">
-                <Plus size={18} />
-                Add Event
+                {editingEventId ? <Save size={18} /> : <Plus size={18} />}
+                {editingEventId ? 'Save Changes' : 'Add Event'}
               </button>
             </div>
           </form>

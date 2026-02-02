@@ -364,6 +364,41 @@ export interface Database {
           created_at?: string;
         };
       };
+      reminders: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          message: string;
+          date_time: string;
+          task_id: string | null;
+          event_id: string | null;
+          dismissed: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          message: string;
+          date_time: string;
+          task_id?: string | null;
+          event_id?: string | null;
+          dismissed?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          message?: string;
+          date_time?: string;
+          task_id?: string | null;
+          event_id?: string | null;
+          dismissed?: boolean;
+          created_at?: string;
+        };
+      };
     };
   };
 }

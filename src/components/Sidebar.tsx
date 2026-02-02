@@ -33,6 +33,14 @@ export default function Sidebar() {
 
   const pendingTasks = tasks.filter(t => t.status !== 'done').length;
 
+  const handleNavClick = (viewId: string) => {
+    dispatch({ type: 'SET_VIEW', payload: viewId });
+    // Close sidebar on mobile after navigation
+    if (window.innerWidth <= 768) {
+      dispatch({ type: 'TOGGLE_SIDEBAR' });
+    }
+  };
+
   const NavSection = ({ title, items }: { title: string; items: typeof navItems }) => (
     <div className="nav-section">
       <div className="nav-section-title">{title}</div>
@@ -40,7 +48,7 @@ export default function Sidebar() {
         <div
           key={item.id}
           className={`nav-item ${currentView === item.id ? 'active' : ''}`}
-          onClick={() => dispatch({ type: 'SET_VIEW', payload: item.id })}
+          onClick={() => handleNavClick(item.id)}
         >
           <item.icon />
           <span>{item.label}</span>

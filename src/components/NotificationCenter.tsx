@@ -62,13 +62,15 @@ export default function NotificationCenter() {
             onClick={() => setIsOpen(false)}
           />
           <div
+            className="notification-dropdown"
             style={{
-              position: 'absolute',
-              top: '100%',
-              right: 0,
-              marginTop: 8,
-              width: 360,
-              maxHeight: 480,
+              position: 'fixed',
+              top: 60,
+              right: 8,
+              left: 8,
+              maxWidth: 360,
+              marginLeft: 'auto',
+              maxHeight: 'calc(100vh - 80px)',
               background: 'var(--bg-card)',
               border: '1px solid var(--border-color)',
               borderRadius: 12,
